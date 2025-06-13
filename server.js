@@ -32,8 +32,9 @@ io.on('connection', (socket) => {
     if (roomState[room]) {
       socket.emit('codeUpdate', { code: roomState[room].code });
       socket.emit('languageUpdate', { language: roomState[room].language, code: roomState[room].code });
+      socket.emit('outputHistory', { outputHistory: roomState[room].outputHistory || [] });
     } else {
-      roomState[room] = { code: '// Write your code here', language: 'javascript' };
+      roomState[room] = { code: '// Write your code here', language: 'javascript', outputHistory: [] };
     }
   });
 
@@ -53,7 +54,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('runOutput', ({ output, room }) => {
-    io.in(room).emit('runOutput', { output });
+    if (!roomState[room]) roomState[room] = { outputHistory: [] };
+    const timestamp = new Date().toLocaleString();
+    if (!roomState[room].outputHistory) roomState[room].outputHistory = [];
+    roomState[room].outputHistory.push({ timestamp, output });
+    io.in(room).emit('outputHistory', { outputHistory: roomState[room].outputHistory });
   });
 
   socket.on('disconnect', () => {

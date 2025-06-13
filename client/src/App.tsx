@@ -119,15 +119,8 @@ function Room() {
       setLanguage(language);
       prevLanguage.current = language;
     });
-    socket.on('runOutput', ({ output }) => {
-      const now = new Date();
-      setOutputBlocks(blocks => [
-        ...blocks,
-        {
-          timestamp: now.toLocaleString(),
-          output,
-        },
-      ]);
+    socket.on('outputHistory', ({ outputHistory }) => {
+      setOutputBlocks(outputHistory);
     });
 
     return () => {
@@ -161,14 +154,6 @@ function Room() {
   };
 
   const handleRun = async () => {
-    const now = new Date();
-    setOutputBlocks(blocks => [
-      ...blocks,
-      {
-        timestamp: now.toLocaleString(),
-        output: 'Running...'
-      },
-    ]);
     try {
       const res = await axios.post('http://localhost:5000/execute', {
         code,
