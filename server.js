@@ -17,6 +17,7 @@ app.use(cors());
 app.use(express.json());
 
 const roomState = {};
+const userNames = {};
 
 app.get('/', (req, res) => {
   res.send('CoderPad Clone Backend Running');
@@ -25,17 +26,20 @@ app.get('/', (req, res) => {
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
 
-  socket.on('joinRoom', ({ room }) => {
-    console.log(`joinRoom received from ${socket.id} for room: ${room}`);
+  socket.on('joinRoom', ({ room, name }) => {
+    console.log(`joinRoom received from ${socket.id} for room: ${room}, name: ${name}`);
     socket.join(room);
-    // Send current state to the new user
-    if (roomState[room]) {
-      socket.emit('codeUpdate', { code: roomState[room].code });
-      socket.emit('languageUpdate', { language: roomState[room].language, code: roomState[room].code });
-      socket.emit('outputHistory', { outputHistory: roomState[room].outputHistory || [] });
-    } else {
+    if (!roomState[room]) {
       roomState[room] = { code: '// Write your code here', language: 'javascript', outputHistory: [] };
     }
+    if (!userNames[room]) userNames[room] = {};
+    userNames[room][socket.id] = name || 'Anonymous';
+    // Send current state to the new user
+    socket.emit('codeUpdate', { code: roomState[room].code });
+    socket.emit('languageUpdate', { language: roomState[room].language, code: roomState[room].code });
+    socket.emit('outputHistory', { outputHistory: roomState[room].outputHistory || [] });
+    // Broadcast user list
+    io.in(room).emit('userList', { users: Object.values(userNames[room]) });
   });
 
   socket.on('codeUpdate', ({ code, room }) => {
@@ -59,6 +63,15 @@ io.on('connection', (socket) => {
     if (!roomState[room].outputHistory) roomState[room].outputHistory = [];
     roomState[room].outputHistory.push({ timestamp, output });
     io.in(room).emit('outputHistory', { outputHistory: roomState[room].outputHistory });
+  });
+
+  socket.on('disconnecting', () => {
+    for (const room of socket.rooms) {
+      if (userNames[room] && userNames[room][socket.id]) {
+        delete userNames[room][socket.id];
+        io.in(room).emit('userList', { users: Object.values(userNames[room]) });
+      }
+    }
   });
 
   socket.on('disconnect', () => {

@@ -82,6 +82,9 @@ function Room() {
   const [code, setCode] = useState('// Write your code here');
   const [language, setLanguage] = useState('javascript');
   const [outputBlocks, setOutputBlocks] = useState<{ timestamp: string; output: string }[]>([]);
+  const [users, setUsers] = useState<string[]>([]);
+  const [name, setName] = useState('');
+  const [namePrompt, setNamePrompt] = useState(true);
   const socketRef = useRef<Socket<ServerEvents, ClientEvents> | null>(null);
   const isRemoteUpdate = useRef(false);
   const prevLanguage = useRef(language);
@@ -101,10 +104,10 @@ function Room() {
   };
 
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || !name) return;
     const socket = io(SOCKET_SERVER_URL);
     socketRef.current = socket;
-    socket.emit('joinRoom', { room: roomId });
+    socket.emit('joinRoom', { room: roomId, name });
 
     socket.on('connect', () => {
       console.log('Connected to backend Socket.IO server');
@@ -122,11 +125,14 @@ function Room() {
     socket.on('outputHistory', ({ outputHistory }) => {
       setOutputBlocks(outputHistory);
     });
+    socket.on('userList', ({ users }) => {
+      setUsers(users);
+    });
 
     return () => {
       socket.disconnect();
     };
-  }, [roomId]);
+  }, [roomId, name]);
 
   const handleCodeChange = (value: string | undefined) => {
     setCode(value || '');
@@ -169,6 +175,29 @@ function Room() {
     }
   };
 
+  if (namePrompt) {
+    return (
+      <div className="App">
+        <header className="App-header">
+          <h1>Enter your name to join the room</h1>
+          <form onSubmit={e => { e.preventDefault(); if (name.trim()) setNamePrompt(false); }}>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Your name"
+              style={{ fontSize: 18, padding: 8 }}
+              autoFocus
+            />
+            <button type="submit" style={{ fontSize: 18, marginLeft: 12 }}>
+              Join
+            </button>
+          </form>
+        </header>
+      </div>
+    );
+  }
+
   return (
     <div className="App">
       <header className="App-header">
@@ -189,6 +218,9 @@ function Room() {
         </div>
         <div className="main-content">
           <div className="editor-container">
+            <div style={{ marginBottom: 12, textAlign: 'left', color: '#aaa', fontSize: 14 }}>
+              <strong>Users in room:</strong> {users.join(', ')}
+            </div>
             <MonacoEditor
               height="100%"
               language={language}
