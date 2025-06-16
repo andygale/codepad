@@ -12,10 +12,11 @@ import {
 import './App.css';
 
 const languages = [
-  { label: 'JavaScript', value: 'javascript' },
-  { label: 'Python', value: 'python3' },
   { label: 'C++', value: 'cpp' },
   { label: 'Java', value: 'java' },
+  { label: 'JavaScript', value: 'javascript' },
+  { label: 'Python', value: 'python3' },
+  { label: 'TypeScript', value: 'typescript' },
 ];
 
 const SOCKET_SERVER_URL = 'http://localhost:5000';
@@ -79,8 +80,8 @@ function Landing() {
 
 function Room() {
   const { roomId } = useParams();
-  const [code, setCode] = useState('// Write your code here');
-  const [language, setLanguage] = useState('javascript');
+  const [language, setLanguage] = useState('typescript');
+  const [code, setCode] = useState(`class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`);
   const [outputBlocks, setOutputBlocks] = useState<{ timestamp: string; output: string }[]>([]);
   const [users, setUsers] = useState<string[]>([]);
   const [name, setName] = useState('');
@@ -88,9 +89,11 @@ function Room() {
   const socketRef = useRef<Socket<ServerEvents, ClientEvents> | null>(null);
   const isRemoteUpdate = useRef(false);
   const prevLanguage = useRef(language);
+  const [copyMsg, setCopyMsg] = useState('');
 
   const languageExamples: Record<string, string> = {
     javascript: `class Greeter {\n  constructor(message) {\n    this.message = message;\n  }\n  greet() {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
+    typescript: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
     python3: `class Greeter:\n    def __init__(self, message):\n        self.message = message\n    def greet(self):\n        print(self.message)\n\ngreeter = Greeter('Hello, world!')\ngreeter.greet()`,
     cpp: `#include <iostream>\n\nclass Greeter {\npublic:\n    Greeter(const std::string& message) : message_(message) {}\n    void greet() const { std::cout << message_ << std::endl; }\nprivate:\n    std::string message_;\n};\n\nint main() {\n    Greeter greeter(\"Hello, world!\");\n    greeter.greet();\n    return 0;\n}`,
     java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter(\"Hello, world!\");\n        greeter.greet();\n    }\n}`
@@ -175,6 +178,14 @@ function Room() {
     }
   };
 
+  const handleCopyUrl = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopyMsg('Room URL copied!');
+      setTimeout(() => setCopyMsg(''), 2000);
+    });
+  };
+
   if (namePrompt) {
     return (
       <div className="App">
@@ -201,7 +212,13 @@ function Room() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>CoderPad Room: {roomId}</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 16 }}>
+          <h1 style={{ margin: 0 }}>CoderPad Room: {roomId}</h1>
+          <button onClick={handleCopyUrl} style={{ fontSize: 14, padding: '4px 10px', cursor: 'pointer' }}>
+            Copy Room URL
+          </button>
+          {copyMsg && <span style={{ color: '#0f0' }}>{copyMsg}</span>}
+        </div>
         <div style={{ marginBottom: 16 }}>
           <select
             value={language}

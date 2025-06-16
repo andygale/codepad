@@ -30,7 +30,11 @@ io.on('connection', (socket) => {
     console.log(`joinRoom received from ${socket.id} for room: ${room}, name: ${name}`);
     socket.join(room);
     if (!roomState[room]) {
-      roomState[room] = { code: '// Write your code here', language: 'javascript', outputHistory: [] };
+      roomState[room] = {
+        code: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
+        language: 'typescript',
+        outputHistory: []
+      };
     }
     if (!userNames[room]) userNames[room] = {};
     userNames[room][socket.id] = name || 'Anonymous';
