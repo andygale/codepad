@@ -17,6 +17,7 @@ const languages = [
   { label: 'JavaScript', value: 'javascript' },
   { label: 'Python', value: 'python3' },
   { label: 'TypeScript', value: 'typescript' },
+  { label: 'Web', value: 'web' },
 ];
 
 const SOCKET_SERVER_URL = 'http://localhost:5000';
@@ -90,13 +91,15 @@ function Room() {
   const isRemoteUpdate = useRef(false);
   const prevLanguage = useRef(language);
   const [copyMsg, setCopyMsg] = useState('');
+  const [iframeHtml, setIframeHtml] = useState('');
 
   const languageExamples: Record<string, string> = {
     javascript: `class Greeter {\n  constructor(message) {\n    this.message = message;\n  }\n  greet() {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
     typescript: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
     python3: `class Greeter:\n    def __init__(self, message):\n        self.message = message\n    def greet(self):\n        print(self.message)\n\ngreeter = Greeter('Hello, world!')\ngreeter.greet()`,
     cpp: `#include <iostream>\n\nclass Greeter {\npublic:\n    Greeter(const std::string& message) : message_(message) {}\n    void greet() const { std::cout << message_ << std::endl; }\nprivate:\n    std::string message_;\n};\n\nint main() {\n    Greeter greeter(\"Hello, world!\");\n    greeter.greet();\n    return 0;\n}`,
-    java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter(\"Hello, world!\");\n        greeter.greet();\n    }\n}`
+    java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter(\"Hello, world!\");\n        greeter.greet();\n    }\n}`,
+    web: `<!DOCTYPE html>\n<html>\n<head>\n  <title>Web Example</title>\n  <style>\n    body { font-family: sans-serif; background: #f9f9f9; color: #222; }\n    .greeting { color: #007acc; font-size: 2em; margin-top: 2em; }\n  </style>\n</head>\n<body>\n  <div class=\"greeting\">Hello, world!</div>\n  <script>\n    document.querySelector('.greeting').textContent += ' (from JavaScript!)';\n  </script>\n</body>\n</html>`
   };
 
   const commentSyntax: Record<string, (code: string) => string> = {
@@ -127,6 +130,9 @@ function Room() {
     });
     socket.on('outputHistory', ({ outputHistory }) => {
       setOutputBlocks(outputHistory);
+      if (language === 'web' && outputHistory.length > 0) {
+        setIframeHtml(outputHistory[outputHistory.length - 1].output);
+      }
     });
     socket.on('userList', ({ users }) => {
       setUsers(users);
@@ -163,6 +169,13 @@ function Room() {
   };
 
   const handleRun = async () => {
+    if (language === 'web') {
+      setIframeHtml(code);
+      if (socketRef.current && roomId) {
+        socketRef.current.emit('runOutput', { output: code, room: roomId });
+      }
+      return;
+    }
     try {
       const res = await axios.post('http://localhost:5000/execute', {
         code,
@@ -249,16 +262,24 @@ function Room() {
           </div>
           <div className="output-container">
             <h2>Output</h2>
-            <div className="output-box">
-              {outputBlocks.map((block, idx) => (
-                <div key={idx} style={{ marginBottom: 16 }}>
-                  <div style={{ color: '#aaa', fontSize: 12, marginBottom: 4 }}>
-                    Run at {block.timestamp}
+            {language === 'web' ? (
+              <iframe
+                title="Web Output"
+                srcDoc={iframeHtml}
+                style={{ width: '100%', height: '100%', border: '1px solid #444', background: '#fff', borderRadius: 6 }}
+              />
+            ) : (
+              <div className="output-box">
+                {outputBlocks.map((block, idx) => (
+                  <div key={idx} style={{ marginBottom: 16 }}>
+                    <div style={{ color: '#aaa', fontSize: 12, marginBottom: 4 }}>
+                      Run at {block.timestamp}
+                    </div>
+                    <pre style={{ margin: 0 }}>{block.output}</pre>
                   </div>
-                  <pre style={{ margin: 0 }}>{block.output}</pre>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </header>
