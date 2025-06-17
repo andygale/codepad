@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const axios = require('axios');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -115,6 +116,14 @@ app.post('/execute', async (req, res) => {
     console.error('Error in /execute:', err);
     res.status(500).json({ error: 'Code execution failed', details: err.message, piston: err.response?.data });
   }
+});
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, 'client/build')));
+
+// For any other route, serve index.html from the React build
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
 });
 
 const PORT = 5000;
