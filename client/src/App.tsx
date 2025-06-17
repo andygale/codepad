@@ -20,8 +20,6 @@ const languages = [
   { label: 'Web', value: 'web' },
 ];
 
-const SOCKET_SERVER_URL = 'http://localhost:5000';
-
 type ServerEvents = {
   codeUpdate: (data: { code: string }) => void;
   languageUpdate: (data: { language: string; code?: string }) => void;
@@ -111,7 +109,9 @@ function Room() {
 
   useEffect(() => {
     if (!roomId || !name) return;
-    const socket = io(SOCKET_SERVER_URL);
+    const socket = io({
+      transports: ['websocket'],
+    });
     socketRef.current = socket;
     socket.emit('joinRoom', { room: roomId, name });
 
@@ -177,7 +177,7 @@ function Room() {
       return;
     }
     try {
-      const res = await axios.post('http://localhost:5000/execute', {
+      const res = await axios.post('/execute', {
         code,
         language,
       });
