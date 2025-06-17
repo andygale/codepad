@@ -58,7 +58,7 @@ function Landing() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>CoderPad Clone</h1>
+        <h1>Codepad</h1>
         <button onClick={handleNewRoom} style={{ fontSize: 18, margin: 12 }}>
           New Room
         </button>
@@ -226,7 +226,7 @@ function Room() {
     <div className="App">
       <header className="App-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 16 }}>
-          <h1 style={{ margin: 0 }}>CoderPad Room: {roomId}</h1>
+          <h1 style={{ margin: 0 }}>Codepad Room: {roomId}</h1>
           <button onClick={handleCopyUrl} style={{ fontSize: 14, padding: '4px 10px', cursor: 'pointer' }}>
             Copy Room URL
           </button>

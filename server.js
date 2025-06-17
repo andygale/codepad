@@ -20,7 +20,7 @@ const roomState = {};
 const userNames = {};
 
 app.get('/', (req, res) => {
-  res.send('CoderPad Clone Backend Running');
+  res.send('Codepad Backend Running');
 });
 
 io.on('connection', (socket) => {
