@@ -25,10 +25,7 @@ app.get('/', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-  console.log('A user connected:', socket.id);
-
   socket.on('joinRoom', ({ room, name }) => {
-    console.log(`joinRoom received from ${socket.id} for room: ${room}, name: ${name}`);
     socket.join(room);
     if (!roomState[room]) {
       roomState[room] = {
@@ -48,14 +45,12 @@ io.on('connection', (socket) => {
   });
 
   socket.on('codeUpdate', ({ code, room }) => {
-    console.log(`codeUpdate received from ${socket.id} for room: ${room}, code:`, code);
     if (!roomState[room]) roomState[room] = {};
     roomState[room].code = code;
     socket.to(room).emit('codeUpdate', { code });
   });
 
   socket.on('languageUpdate', ({ language, code, room }) => {
-    console.log(`languageUpdate received from ${socket.id} for room: ${room}, language:`, language);
     if (!roomState[room]) roomState[room] = {};
     roomState[room].language = language;
     roomState[room].code = code;
