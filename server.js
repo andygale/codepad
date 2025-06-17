@@ -20,10 +20,6 @@ app.use(express.json());
 const roomState = {};
 const userNames = {};
 
-app.get('/', (req, res) => {
-  res.send('Codepad Backend Running');
-});
-
 io.on('connection', (socket) => {
   socket.on('joinRoom', ({ room, name }) => {
     socket.join(room);
