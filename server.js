@@ -32,7 +32,7 @@ io.on('connection', (socket) => {
       };
     }
     if (!userNames[room]) userNames[room] = {};
-    userNames[room][socket.id] = name || 'Anonymous';
+    userNames[room][socket.id] = { name: name || 'Anonymous', id: socket.id };
     // Send current state to the new user
     socket.emit('codeUpdate', { code: roomState[room].code });
     socket.emit('languageUpdate', { language: roomState[room].language, code: roomState[room].code });
@@ -52,6 +52,14 @@ io.on('connection', (socket) => {
     roomState[room].language = language;
     roomState[room].code = code;
     socket.to(room).emit('languageUpdate', { language, code });
+  });
+
+  socket.on('cursorChange', ({ room, position }) => {
+    socket.to(room).emit('remoteCursorChange', { position, socketId: socket.id });
+  });
+
+  socket.on('selectionChange', ({ room, selection }) => {
+    socket.to(room).emit('remoteSelectionChange', { selection, socketId: socket.id });
   });
 
   socket.on('runOutput', ({ output, room }) => {
@@ -84,7 +92,9 @@ app.post('/execute', async (req, res) => {
     python3: '3.10.0',
     cpp: '10.2.0',
     java: '15.0.2',
-    typescript: '5.0.3'
+    typescript: '5.0.3',
+    swift: '5.3.3',
+    kotlin: '1.8.20'
   };
 
   const fileNames = {
@@ -92,7 +102,9 @@ app.post('/execute', async (req, res) => {
     python3: 'main.py',
     cpp: 'main.cpp',
     java: 'Main.java',
-    typescript: 'main.ts'
+    typescript: 'main.ts',
+    swift: 'main.swift',
+    kotlin: 'main.kt'
   };
 
   try {

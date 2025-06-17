@@ -13,24 +13,32 @@ import './App.css';
 
 const languages = [
   { label: 'C++', value: 'cpp' },
+  { label: 'HTML', value: 'html' },
   { label: 'Java', value: 'java' },
   { label: 'JavaScript', value: 'javascript' },
+  { label: 'Kotlin', value: 'kotlin' },
   { label: 'Python', value: 'python3' },
+  { label: 'Swift', value: 'swift' },
   { label: 'TypeScript', value: 'typescript' },
-  { label: 'Web', value: 'web' },
 ];
 
 type ServerEvents = {
   codeUpdate: (data: { code: string }) => void;
   languageUpdate: (data: { language: string; code?: string }) => void;
   runOutput: (data: { output: string }) => void;
+  remoteCursorChange: (data: { position: any; socketId: string }) => void;
+  remoteSelectionChange: (data: { selection: any; socketId:string }) => void;
+  userList: (data: { users: {id: string, name: string}[] }) => void;
+  outputHistory: (data: { outputHistory: { timestamp: string; output: string }[] }) => void;
 };
 
 type ClientEvents = {
   codeUpdate: (data: { code: string; room: string }) => void;
   languageUpdate: (data: { language: string; code?: string; room: string }) => void;
-  joinRoom: (data: { room: string }) => void;
+  joinRoom: (data: { room: string; name: string }) => void;
   runOutput: (data: { output: string; room: string }) => void;
+  cursorChange: (data: { room: string; position: any }) => void;
+  selectionChange: (data: { room: string; selection: any }) => void;
 };
 
 function generateRoomId() {
@@ -82,10 +90,15 @@ function Room() {
   const [language, setLanguage] = useState('typescript');
   const [code, setCode] = useState(`class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`);
   const [outputBlocks, setOutputBlocks] = useState<{ timestamp: string; output: string }[]>([]);
-  const [users, setUsers] = useState<string[]>([]);
+  const [users, setUsers] = useState<{id: string, name: string}[]>([]);
   const [name, setName] = useState('');
   const [namePrompt, setNamePrompt] = useState(true);
+  const [isRunning, setIsRunning] = useState(false);
   const socketRef = useRef<Socket<ServerEvents, ClientEvents> | null>(null);
+  const editorRef = useRef<any>(null);
+  const monacoRef = useRef<any>(null);
+  const decorationsCollectionRef = useRef<any>(null);
+  const [remoteSelections, setRemoteSelections] = useState<Record<string, { selection: any, name: string }>>({});
   const isRemoteUpdate = useRef(false);
   const prevLanguage = useRef(language);
   const [copyMsg, setCopyMsg] = useState('');
@@ -97,7 +110,19 @@ function Room() {
     python3: `class Greeter:\n    def __init__(self, message):\n        self.message = message\n    def greet(self):\n        print(self.message)\n\ngreeter = Greeter('Hello, world!')\ngreeter.greet()`,
     cpp: `#include <iostream>\n\nclass Greeter {\npublic:\n    Greeter(const std::string& message) : message_(message) {}\n    void greet() const { std::cout << message_ << std::endl; }\nprivate:\n    std::string message_;\n};\n\nint main() {\n    Greeter greeter(\"Hello, world!\");\n    greeter.greet();\n    return 0;\n}`,
     java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter(\"Hello, world!\");\n        greeter.greet();\n    }\n}`,
-    web: `<!DOCTYPE html>\n<html>\n<head>\n  <title>Web Example</title>\n  <style>\n    body { font-family: sans-serif; background: #f9f9f9; color: #222; }\n    .greeting { color: #007acc; font-size: 2em; margin-top: 2em; }\n  </style>\n</head>\n<body>\n  <div class=\"greeting\">Hello, world!</div>\n  <script>\n    document.querySelector('.greeting').textContent += ' (from JavaScript!)';\n  </script>\n</body>\n</html>`
+    html: `<!DOCTYPE html>\n<html>\n<head>\n  <title>Web Example</title>\n  <style>\n    body { font-family: sans-serif; background: #f9f9f9; color: #222; }\n    .greeting { color: #007acc; font-size: 2em; margin-top: 2em; }\n  </style>\n</head>\n<body>\n  <div class=\"greeting\">Hello, world!</div>\n  <script>\n    document.querySelector('.greeting').textContent += ' (from JavaScript!)';\n  </script>\n</body>\n</html>`,
+    swift: `func greet(name: String) {\n    print("Hello, \\(name)!")\n}\n\ngreet(name: "world")`,
+    kotlin: `fun main() {\n    println("Hello, world!")\n}`
+  };
+
+  const userColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#F7D842', '#8A2BE2', '#FF8C00', '#00CED1'];
+  const getUserColor = (userId: string) => {
+      let hash = 0;
+      for (let i = 0; i < userId.length; i++) {
+          hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const index = Math.abs(hash % userColors.length);
+      return userColors[index];
   };
 
   const commentSyntax: Record<string, (code: string) => string> = {
@@ -130,12 +155,46 @@ function Room() {
     });
     socket.on('outputHistory', ({ outputHistory }) => {
       setOutputBlocks(outputHistory);
-      if (language === 'web' && outputHistory.length > 0) {
+      if (language === 'html' && outputHistory.length > 0) {
         setIframeHtml(outputHistory[outputHistory.length - 1].output);
       }
     });
     socket.on('userList', ({ users }) => {
       setUsers(users);
+      setRemoteSelections(prev => {
+        const next = { ...prev };
+        const userIds = users.map((u: { id: string }) => u.id);
+        Object.keys(next).forEach(id => {
+          if (!userIds.includes(id)) {
+            delete next[id];
+          }
+        });
+        return next;
+      });
+    });
+
+    socket.on('remoteCursorChange', ({ position, socketId }) => {
+      if (!monacoRef.current) return;
+      const user = users.find(u => u.id === socketId);
+      setRemoteSelections(prev => ({
+        ...prev,
+        [socketId]: {
+          selection: new monacoRef.current.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+          name: user?.name || 'Anonymous'
+        },
+      }));
+    });
+
+    socket.on('remoteSelectionChange', ({ selection, socketId }) => {
+      if (!monacoRef.current) return;
+       const user = users.find(u => u.id === socketId);
+      setRemoteSelections(prev => ({
+        ...prev,
+        [socketId]: {
+          selection: new monacoRef.current.Range(selection.startLineNumber, selection.startColumn, selection.endLineNumber, selection.endColumn),
+          name: user?.name || 'Anonymous'
+        },
+      }));
     });
 
     return () => {
@@ -169,14 +228,15 @@ function Room() {
   };
 
   const handleRun = async () => {
-    if (language === 'web') {
-      setIframeHtml(code);
-      if (socketRef.current && roomId) {
-        socketRef.current.emit('runOutput', { output: code, room: roomId });
-      }
-      return;
-    }
+    setIsRunning(true);
     try {
+      if (language === 'html') {
+        setIframeHtml(code);
+        if (socketRef.current && roomId) {
+          socketRef.current.emit('runOutput', { output: code, room: roomId });
+        }
+        return;
+      }
       const res = await axios.post('/execute', {
         code,
         language,
@@ -188,8 +248,77 @@ function Room() {
       if (socketRef.current && roomId) {
         socketRef.current.emit('runOutput', { output: 'Error running code: ' + (err.response?.data?.error || err.message), room: roomId });
       }
+    } finally {
+      setIsRunning(false);
     }
   };
+
+  const handleEditorDidMount = (editor: any, monaco: any) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+    decorationsCollectionRef.current = editor.createDecorationsCollection();
+
+    editor.onDidChangeCursorPosition(() => {
+      if (socketRef.current && roomId) {
+        socketRef.current.emit('cursorChange', { room: roomId, position: editor.getPosition() });
+      }
+    });
+
+    editor.onDidChangeCursorSelection(() => {
+      if (socketRef.current && roomId) {
+        socketRef.current.emit('selectionChange', { room: roomId, selection: editor.getSelection() });
+      }
+    });
+  }
+
+  useEffect(() => {
+    if (!editorRef.current || !monacoRef.current) return;
+
+    const userStyles = users.map(user => {
+      const color = getUserColor(user.id);
+      return `
+        .remote-selection-${user.id} {
+            background-color: ${color}4D;
+        }
+        .remote-cursor-${user.id} {
+            border-left: 2px solid ${color};
+        }
+        .remote-cursor-label-${user.id}::after {
+            content: '${user.name}';
+            background-color: ${color};
+            color: white;
+            position: absolute;
+            padding: 2px 5px;
+            border-radius: 2px;
+            font-size: 12px;
+            transform: translateY(-100%);
+            white-space: nowrap;
+        }
+    `;
+    }).join('\n');
+
+    let styleTag = document.getElementById('remote-user-styles');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'remote-user-styles';
+        document.head.appendChild(styleTag);
+    }
+    styleTag.innerHTML = userStyles;
+
+    const newDecorations = Object.entries(remoteSelections).map(([id, { selection }]) => {
+        const isCursor = selection.startLineNumber === selection.endLineNumber && selection.startColumn === selection.endColumn;
+        return {
+            range: selection,
+            options: {
+                className: isCursor ? `remote-cursor-${id}` : `remote-selection-${id}`,
+                beforeContentClassName: isCursor ? `remote-cursor-label-${id}` : undefined
+            }
+        };
+    });
+
+    decorationsCollectionRef.current.set(newDecorations);
+
+  }, [remoteSelections, users]);
 
   const handleCopyUrl = () => {
     const url = window.location.href;
@@ -242,27 +371,28 @@ function Room() {
               <option key={lang.value} value={lang.value}>{lang.label}</option>
             ))}
           </select>
-          <button onClick={handleRun} style={{ marginLeft: 12, fontSize: 16 }}>
-            Run
+          <button onClick={handleRun} disabled={isRunning} style={{ marginLeft: 12, fontSize: 16 }}>
+            {isRunning ? 'Running...' : 'Run'}
           </button>
         </div>
         <div className="main-content">
           <div className="editor-container">
             <div style={{ marginBottom: 12, textAlign: 'left', color: '#aaa', fontSize: 14 }}>
-              <strong>Users in room:</strong> {users.join(', ')}
+              <strong>Users in room:</strong> {users.map((u: { id: string, name: string }) => u.name).join(', ')}
             </div>
             <MonacoEditor
               height="100%"
-              language={language}
+              language={language === 'python3' ? 'python' : language}
+              theme="vs-dark"
               value={code}
               onChange={handleCodeChange}
-              theme="vs-dark"
+              onMount={handleEditorDidMount}
               options={{ minimap: { enabled: false } }}
             />
           </div>
           <div className="output-container">
             <h2>Output</h2>
-            {language === 'web' ? (
+            {language === 'html' ? (
               <iframe
                 title="Web Output"
                 srcDoc={iframeHtml}
