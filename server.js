@@ -77,27 +77,28 @@ io.on('connection', (socket) => {
 
 app.post('/execute', async (req, res) => {
   const { code, language } = req.body;
-  // Hardcoded versions for now
+
   const languageVersions = {
     javascript: '18.15.0',
     python3: '3.10.0',
-    cpp: '11.0.0',
+    cpp: '10.2.0',
     java: '15.0.2',
+    typescript: '5.0.3'
   };
-  const version = languageVersions[language] || 'latest';
-  // Determine file name based on language
+
   const fileNames = {
     javascript: 'main.js',
     python3: 'main.py',
     cpp: 'main.cpp',
     java: 'Main.java',
+    typescript: 'main.ts'
   };
-  const fileName = fileNames[language] || 'main.txt';
+
   try {
     const response = await axios.post('https://emkc.org/api/v2/piston/execute', {
-      language,
-      version,
-      files: [{ name: fileName, content: code }]
+      language: language,
+      version: languageVersions[language] || '*',
+      files: [{ name: fileNames[language] || 'main.txt', content: code }]
     });
     res.json({ output: response.data.run.output });
   } catch (err) {
@@ -108,7 +109,6 @@ app.post('/execute', async (req, res) => {
     res.status(500).json({ error: 'Code execution failed', details: err.message, piston: err.response?.data });
   }
 });
-
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, 'client/build')));
 
