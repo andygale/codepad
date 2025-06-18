@@ -1,18 +1,34 @@
 services:
   - type: web
     name: codepad-piston
-    runtime: docker
-    dockerfilePath: ./Dockerfile.piston
+    runtime: image
+    image:
+      url: ghcr.io/engineer-man/piston
     plan: starter
     region: oregon
     env: production
-    port: 2000
-    envVars:
-      - key: PISTON_LOG_LEVEL
-        value: INFO
-      - key: PISTON_BIND_ADDR
-        value: 0.0.0.0:2000
+    healthCheckPath: /api/v2/runtimes
     scaling:
       minInstances: 1
       maxInstances: 1
-      targetCPUPercent: 70 
+      targetCPUPercent: 70
+    disks:
+      - name: piston-data
+        mountPath: /piston
+        sizeGB: 10
+    envVars:
+      - key: PISTON_LOG_LEVEL
+        value: INFO
+
+# The following are no longer needed as we are using the official image
+# and Render's dynamic port assignment.
+#    port: 2000
+#    envVars:
+#      - key: PISTON_LOG_LEVEL
+#        value: INFO
+#      - key: PISTON_BIND_ADDR
+#        value: 0.0.0.0:2000
+#    scaling:
+#      minInstances: 1
+#      maxInstances: 1
+#      targetCPUPercent: 70 
