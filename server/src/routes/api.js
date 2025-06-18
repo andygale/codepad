@@ -1,7 +1,36 @@
 const express = require('express');
 const codeExecutionService = require('../services/codeExecutionService');
+const roomService = require('../services/roomService');
 
 const router = express.Router();
+
+router.get('/rooms', async (req, res) => {
+  const rooms = await roomService.getAllRooms();
+  res.json(rooms);
+});
+
+router.get('/rooms/:roomId', async (req, res) => {
+  const { roomId } = req.params;
+  const room = await roomService.getRoom(roomId);
+  if (room) {
+    res.json(room);
+  } else {
+    res.status(404).json({ error: 'Room not found' });
+  }
+});
+
+router.post('/rooms', async (req, res) => {
+  const { title } = req.body;
+  if (!title) {
+    return res.status(400).json({ error: 'Missing required field: title' });
+  }
+  const newRoom = await roomService.createRoom(title);
+  if (newRoom) {
+    res.status(201).json(newRoom);
+  } else {
+    res.status(500).json({ error: 'Failed to create room' });
+  }
+});
 
 router.post('/execute', async (req, res) => {
   const { code, language } = req.body;

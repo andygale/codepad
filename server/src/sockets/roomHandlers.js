@@ -1,14 +1,29 @@
 const roomService = require('../services/roomService');
+const RoomService = require('../services/roomService');
 
 const setupRoomHandlers = (io, socket) => {
-  socket.on('joinRoom', ({ room, name }) => {
-    socket.join(room);
+  const joinRoom = async ({ roomId, user }) => {
+    const room = await RoomService.getRoom(roomId);
+    if (!room) {
+      console.log(`User ${user.id} (${user.name}) attempted to join non-existent room ${roomId}`);
+      socket.emit('room_error', { message: `Room ${roomId} does not exist.` });
+      return;
+    }
+
+    // Send room details to the joining user
+    socket.emit('room_details', { 
+      title: room.title, 
+      createdAt: room.created_at 
+    });
+
+    console.log(`User ${user.id} (${user.name}) is joining room ${roomId}`);
+    socket.join(roomId);
     
     // Get or create room state
-    const roomState = roomService.getOrCreateRoom(room);
+    const roomState = roomService.getOrCreateRoom(roomId);
     
     // Add user to room
-    const users = roomService.addUserToRoom(room, socket.id, name);
+    const users = roomService.addUserToRoom(roomId, socket.id, user.name);
     
     // Send current state to the new user
     socket.emit('codeUpdate', { code: roomState.code });
@@ -16,10 +31,12 @@ const setupRoomHandlers = (io, socket) => {
     socket.emit('outputHistory', { outputHistory: roomState.outputHistory || [] });
     
     // Broadcast user list to all users in room
-    io.in(room).emit('userList', { users });
+    io.in(roomId).emit('userList', { users });
     
-    console.log(`User ${name} (${socket.id}) joined room ${room}`);
-  });
+    console.log(`User ${user.name} (${socket.id}) joined room ${roomId}`);
+  };
+
+  socket.on('joinRoom', joinRoom);
 
   socket.on('codeUpdate', ({ code, room }) => {
     roomService.updateRoomCode(room, code);

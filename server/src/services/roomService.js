@@ -1,7 +1,46 @@
+const { randomUUID } = require('crypto');
+const db = require('./dbService');
+
+const usersByRoom = {};
+
 class RoomService {
   constructor() {
     this.roomState = {};
     this.userNames = {};
+  }
+
+  async createRoom(title) {
+    const roomId = randomUUID();
+    try {
+      const result = await db.query(
+        'INSERT INTO rooms (room_id, title) VALUES ($1, $2) RETURNING *',
+        [roomId, title]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error creating room:', error);
+      return null;
+    }
+  }
+
+  async getRoom(roomId) {
+    try {
+      const result = await db.query('SELECT * FROM rooms WHERE room_id = $1', [roomId]);
+      return result.rows[0];
+    } catch (error) {
+      console.error(`Error getting room ${roomId}:`, error);
+      return null;
+    }
+  }
+
+  async getAllRooms() {
+    try {
+      const result = await db.query('SELECT * FROM rooms ORDER BY created_at DESC');
+      return result.rows;
+    } catch (error) {
+      console.error('Error getting all rooms:', error);
+      return [];
+    }
   }
 
   getOrCreateRoom(roomId) {

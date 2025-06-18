@@ -1,6 +1,7 @@
 const config = {
   port: process.env.PORT || 5000,
   pistonApiUrl: process.env.PISTON_API_URL || 'https://emkc.org/api/v2/piston/execute',
+  databaseUrl: process.env.DATABASE_URL || 'postgresql://agale@localhost:5432/codepad',
   corsOrigin: process.env.CORS_ORIGIN || '*',
   nodeEnv: process.env.NODE_ENV || 'development',
   
