@@ -14,12 +14,12 @@ This guide will help you deploy your own Piston instance on Render.com for secur
 ### Option 1: One-Click Deploy (Recommended)
 
 1. **Fork this repository** or create a new repo with the Piston files
-2. **Push the Dockerfile.piston and render-piston.yaml** to your repo
+2. **Push the Dockerfile.piston and render.yaml** to your repo
 3. **Connect to Render.com**:
    - Go to [Render.com Dashboard](https://dashboard.render.com)
    - Click "New" → "Blueprint"
    - Connect your GitHub repo
-   - Select the `render-piston.yaml` file
+   - Render will automatically detect the `render.yaml` file
    - Click "Apply"
 
 ### Option 2: Manual Deploy
