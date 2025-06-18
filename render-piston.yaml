@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: codepad-piston
+    runtime: docker
+    dockerfilePath: ./Dockerfile.piston
+    plan: starter
+    region: oregon
+    env: production
+    healthCheckPath: /api/v2/runtimes
+    envVars:
+      - key: PISTON_LOG_LEVEL
+        value: INFO
+      - key: PISTON_BIND_ADDR
+        value: 0.0.0.0:2000
+    scaling:
+      minInstances: 1
+      maxInstances: 3 

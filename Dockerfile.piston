@@ -1,0 +1,12 @@
+FROM ghcr.io/engineer-man/piston:latest
+
+# Expose the default Piston port
+EXPOSE 2000
+
+# Set environment variables for Render.com
+ENV PISTON_LOG_LEVEL=INFO
+ENV PISTON_BIND_ADDR=0.0.0.0:2000
+
+# The official Piston image already has everything configured
+# Just need to ensure it binds to all interfaces for Render.com
+CMD ["/piston_api/src/index.js"] 
