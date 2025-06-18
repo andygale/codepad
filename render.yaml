@@ -8,10 +8,7 @@ services:
     region: oregon
     env: production
     healthCheckPath: /api/v2/runtimes
-    scaling:
-      minInstances: 1
-      maxInstances: 1
-      targetCPUPercent: 70
+    numInstances: 1
     disk:
       name: piston-data
       mountPath: /piston
