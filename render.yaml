@@ -6,7 +6,7 @@ services:
     plan: starter
     region: oregon
     env: production
-    healthCheckPath: /api/v2/runtimes
+    port: 2000
     envVars:
       - key: PISTON_LOG_LEVEL
         value: INFO
@@ -14,5 +14,5 @@ services:
         value: 0.0.0.0:2000
     scaling:
       minInstances: 1
-      maxInstances: 3
+      maxInstances: 1
       targetCPUPercent: 70 
