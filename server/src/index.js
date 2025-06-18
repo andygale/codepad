@@ -57,7 +57,7 @@ app.get('*', (req, res) => {
 });
 
 // Start server
-server.listen(config.port, () => {
+server.listen(config.port, '0.0.0.0', () => {
   console.log(`🚀 Codepad Server listening on port ${config.port}`);
   console.log(`📁 Environment: ${config.nodeEnv}`);
   console.log(`🔧 Piston API: ${config.pistonApiUrl}`);
