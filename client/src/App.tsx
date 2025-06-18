@@ -20,6 +20,7 @@ const languages = [
   { label: 'Python', value: 'python3' },
   { label: 'Swift', value: 'swift' },
   { label: 'TypeScript', value: 'typescript' },
+  { label: 'TypeScript Fast (Deno)', value: 'deno' },
 ];
 
 type ServerEvents = {
@@ -87,7 +88,7 @@ function Landing() {
 
 function Room() {
   const { roomId } = useParams();
-  const [language, setLanguage] = useState('typescript');
+  const [language, setLanguage] = useState('deno');
   const [code, setCode] = useState(`class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`);
   const [outputBlocks, setOutputBlocks] = useState<{ timestamp: string; output: string }[]>([]);
   const [users, setUsers] = useState<{id: string, name: string}[]>([]);
@@ -107,6 +108,7 @@ function Room() {
   const languageExamples: Record<string, string> = {
     javascript: `class Greeter {\n  constructor(message) {\n    this.message = message;\n  }\n  greet() {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
     typescript: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
+    deno: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
     python3: `class Greeter:\n    def __init__(self, message):\n        self.message = message\n    def greet(self):\n        print(self.message)\n\ngreeter = Greeter('Hello, world!')\ngreeter.greet()`,
     cpp: `#include <iostream>\n\nclass Greeter {\npublic:\n    Greeter(const std::string& message) : message_(message) {}\n    void greet() const { std::cout << message_ << std::endl; }\nprivate:\n    std::string message_;\n};\n\nint main() {\n    Greeter greeter(\"Hello, world!\");\n    greeter.greet();\n    return 0;\n}`,
     java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter(\"Hello, world!\");\n        greeter.greet();\n    }\n}`,
@@ -127,6 +129,8 @@ function Room() {
 
   const commentSyntax: Record<string, (code: string) => string> = {
     javascript: code => code.split('\n').map(line => '// ' + line).join('\n'),
+    typescript: code => code.split('\n').map(line => '// ' + line).join('\n'),
+    deno: code => code.split('\n').map(line => '// ' + line).join('\n'),
     python3: code => code.split('\n').map(line => '# ' + line).join('\n'),
     cpp: code => code.split('\n').map(line => '// ' + line).join('\n'),
     java: code => code.split('\n').map(line => '// ' + line).join('\n'),
@@ -237,7 +241,7 @@ function Room() {
         }
         return;
       }
-      const res = await axios.post('/execute', {
+      const res = await axios.post('/api/execute', {
         code,
         language,
       });
@@ -382,7 +386,7 @@ function Room() {
             </div>
             <MonacoEditor
               height="100%"
-              language={language === 'python3' ? 'python' : language}
+              language={language === 'python3' ? 'python' : language === 'deno' ? 'typescript' : language}
               theme="vs-dark"
               value={code}
               onChange={handleCodeChange}

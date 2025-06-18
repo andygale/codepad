@@ -27,7 +27,7 @@ io.on('connection', (socket) => {
     if (!roomState[room]) {
       roomState[room] = {
         code: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
-        language: 'typescript',
+        language: 'deno',
         outputHistory: []
       };
     }
@@ -88,11 +88,12 @@ app.post('/execute', async (req, res) => {
   const { code, language } = req.body;
 
   const languageVersions = {
-    javascript: '18.15.0',
-    python3: '3.10.0',
+    javascript: '20.11.1',
+    python3: '3.12.0',
     cpp: '10.2.0',
     java: '15.0.2',
     typescript: '5.0.3',
+    deno: '1.32.3',
     swift: '5.3.3',
     kotlin: '1.8.20'
   };
@@ -103,12 +104,15 @@ app.post('/execute', async (req, res) => {
     cpp: 'main.cpp',
     java: 'Main.java',
     typescript: 'main.ts',
+    deno: 'main.ts',
     swift: 'main.swift',
     kotlin: 'main.kt'
   };
 
+  const pistonUrl = process.env.PISTON_API_URL || 'http://localhost:2000/api/v2/execute';
+
   try {
-    const response = await axios.post('https://emkc.org/api/v2/piston/execute', {
+    const response = await axios.post(pistonUrl, {
       language: language,
       version: languageVersions[language] || '*',
       files: [{ name: fileNames[language] || 'main.txt', content: code }]

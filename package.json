@@ -5,7 +5,18 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "yarn install && yarn --cwd client install && yarn --cwd client build && node server.js"
+    "dev": "yarn install:all && yarn build:client && yarn server:dev",
+    "start": "yarn install:all && yarn build:client && yarn server:start",
+    "install:all": "yarn install && yarn --cwd client install && yarn --cwd server install",
+    "build:client": "yarn --cwd client build",
+    "server:start": "yarn --cwd server start",
+    "server:dev": "yarn --cwd server dev",
+    "piston:start": "./piston-local.sh start",
+    "piston:stop": "./piston-local.sh stop",
+    "piston:restart": "./piston-local.sh restart",
+    "piston:status": "./piston-local.sh status",
+    "piston:test": "./piston-local.sh test",
+    "dev:local": "yarn piston:start && yarn dev"
   },
   "keywords": [],
   "author": "",
