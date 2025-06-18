@@ -13,9 +13,12 @@ class CodeExecutionService {
         }]
       });
       
+      const { run } = response.data;
+      const output = (run.stdout || '') + (run.stderr || '');
+
       return { 
         success: true, 
-        output: response.data.run.output 
+        output: output
       };
     } catch (error) {
       console.error('Code execution error:', error.message);
