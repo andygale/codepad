@@ -100,6 +100,8 @@ function Room() {
   const monacoRef = useRef<any>(null);
   const decorationsCollectionRef = useRef<any>(null);
   const [remoteSelections, setRemoteSelections] = useState<Record<string, { selection: any, name: string }>>({});
+  const remoteCursorActivity = useRef<Record<string, number>>({});
+  const [visibleCursorLabels, setVisibleCursorLabels] = useState<Record<string, boolean>>({});
   const isRemoteUpdate = useRef(false);
   const prevLanguage = useRef(language);
   const [copyMsg, setCopyMsg] = useState('');
@@ -138,6 +140,7 @@ function Room() {
 
   useEffect(() => {
     if (!roomId || !name) return;
+    
     const socket = io({
       transports: ['websocket'],
     });
@@ -151,6 +154,7 @@ function Room() {
     socket.on('codeUpdate', ({ code }) => {
       isRemoteUpdate.current = true;
       setCode(code);
+      prevLanguage.current = language;
     });
     socket.on('languageUpdate', ({ language, code: newCode }) => {
       setCode(newCode);
@@ -179,32 +183,66 @@ function Room() {
 
     socket.on('remoteCursorChange', ({ position, socketId }) => {
       if (!monacoRef.current) return;
-      const user = users.find(u => u.id === socketId);
-      setRemoteSelections(prev => ({
-        ...prev,
-        [socketId]: {
-          selection: new monacoRef.current.Range(position.lineNumber, position.column, position.lineNumber, position.column),
-          name: user?.name || 'Anonymous'
-        },
-      }));
+      remoteCursorActivity.current[socketId] = Date.now();
+      setUsers(currentUsers => {
+        const user = currentUsers.find(u => u.id === socketId);
+        setRemoteSelections(prev => ({
+          ...prev,
+          [socketId]: {
+            selection: new monacoRef.current.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+            name: user?.name || 'Anonymous'
+          },
+        }));
+        return currentUsers;
+      });
     });
 
     socket.on('remoteSelectionChange', ({ selection, socketId }) => {
       if (!monacoRef.current) return;
-       const user = users.find(u => u.id === socketId);
-      setRemoteSelections(prev => ({
-        ...prev,
-        [socketId]: {
-          selection: new monacoRef.current.Range(selection.startLineNumber, selection.startColumn, selection.endLineNumber, selection.endColumn),
-          name: user?.name || 'Anonymous'
-        },
-      }));
+      remoteCursorActivity.current[socketId] = Date.now();
+      setUsers(currentUsers => {
+        const user = currentUsers.find(u => u.id === socketId);
+        setRemoteSelections(prev => ({
+          ...prev,
+          [socketId]: {
+            selection: new monacoRef.current.Range(selection.startLineNumber, selection.startColumn, selection.endLineNumber, selection.endColumn),
+            name: user?.name || 'Anonymous'
+          },
+        }));
+        return currentUsers;
+      });
     });
 
     return () => {
       socket.disconnect();
     };
   }, [roomId, name]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setVisibleCursorLabels(prevVisible => {
+        const newVisible: Record<string, boolean> = {};
+        let changed = false;
+        
+        for (const socketId in remoteCursorActivity.current) {
+          if (!Object.prototype.hasOwnProperty.call(remoteCursorActivity.current, socketId)) continue;
+          
+          const lastActivity = remoteCursorActivity.current[socketId];
+          const shouldBeVisible = (now - lastActivity) < 2000;
+
+          if (!!prevVisible[socketId] !== shouldBeVisible) {
+            changed = true;
+          }
+          newVisible[socketId] = shouldBeVisible;
+        }
+        
+        return changed ? newVisible : prevVisible;
+      });
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, []); // Remove the dependency to prevent interval recreation
 
   const handleCodeChange = (value: string | undefined) => {
     setCode(value || '');
@@ -286,17 +324,33 @@ function Room() {
         }
         .remote-cursor-${user.id} {
             border-left: 2px solid ${color};
+            position: relative;
         }
-        .remote-cursor-label-${user.id}::after {
+        .remote-cursor-${user.id}:hover::after,
+        .remote-cursor-${user.id}.show-label::after {
             content: '${user.name}';
             background-color: ${color};
             color: white;
             position: absolute;
-            padding: 2px 5px;
-            border-radius: 2px;
-            font-size: 12px;
-            transform: translateY(-100%);
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 500;
+            transform: translateY(-100%) translateX(-50%);
             white-space: nowrap;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            animation: fadeInLabel 0.2s ease-in;
+            pointer-events: none;
+            left: 50%;
+            top: -2px;
+        }
+        .editor-container:hover .remote-cursor-${user.id}::after {
+            opacity: 0.8;
+        }
+        @keyframes fadeInLabel {
+            from { opacity: 0; transform: translateY(-100%) translateX(-50%) scale(0.8); }
+            to { opacity: 1; transform: translateY(-100%) translateX(-50%) scale(1); }
         }
     `;
     }).join('\n');
@@ -314,15 +368,14 @@ function Room() {
         return {
             range: selection,
             options: {
-                className: isCursor ? `remote-cursor-${id}` : `remote-selection-${id}`,
-                beforeContentClassName: isCursor ? `remote-cursor-label-${id}` : undefined
+                className: isCursor ? `remote-cursor-${id} ${visibleCursorLabels[id] ? 'show-label' : ''}` : `remote-selection-${id}`,
             }
         };
     });
 
     decorationsCollectionRef.current.set(newDecorations);
 
-  }, [remoteSelections, users]);
+  }, [remoteSelections, users, getUserColor, visibleCursorLabels]);
 
   const handleCopyUrl = () => {
     const url = window.location.href;
