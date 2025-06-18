@@ -12,10 +12,9 @@ services:
       minInstances: 1
       maxInstances: 1
       targetCPUPercent: 70
-    disks:
-      - name: piston-data
-        mountPath: /piston
-        sizeGB: 10
+    disk:
+      name: piston-data
+      mountPath: /piston
     envVars:
       - key: PISTON_LOG_LEVEL
         value: INFO
