@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import MonacoEditor from '@monaco-editor/react';
 import { io, Socket } from 'socket.io-client';
@@ -69,22 +69,22 @@ function Room() {
     typescript: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
     deno: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
     python3: `class Greeter:\n    def __init__(self, message):\n        self.message = message\n    def greet(self):\n        print(self.message)\n\ngreeter = Greeter('Hello, world!')\ngreeter.greet()`,
-    cpp: `#include <iostream>\n\nclass Greeter {\npublic:\n    Greeter(const std::string& message) : message_(message) {}\n    void greet() const { std::cout << message_ << std::endl; }\nprivate:\n    std::string message_;\n};\n\nint main() {\n    Greeter greeter(\"Hello, world!\");\n    greeter.greet();\n    return 0;\n}`,
-    java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter(\"Hello, world!\");\n        greeter.greet();\n    }\n}`,
-    html: `<!DOCTYPE html>\n<html>\n<head>\n  <title>Web Example</title>\n  <style>\n    body { font-family: sans-serif; background: #f9f9f9; color: #222; }\n    .greeting { color: #007acc; font-size: 2em; margin-top: 2em; }\n  </style>\n</head>\n<body>\n  <div class=\"greeting\">Hello, world!</div>\n  <script>\n    document.querySelector('.greeting').textContent += ' (from JavaScript!)';\n  </script>\n</body>\n</html>`,
+    cpp: `#include <iostream>\n\nclass Greeter {\npublic:\n    Greeter(const std::string& message) : message_(message) {}\n    void greet() const { std::cout << message_ << std::endl; }\nprivate:\n    std::string message_;\n};\n\nint main() {\n    Greeter greeter("Hello, world!");\n    greeter.greet();\n    return 0;\n}`,
+    java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter("Hello, world!");\n        greeter.greet();\n    }\n}`,
+    html: `<!DOCTYPE html>\n<html>\n<head>\n  <title>Web Example</title>\n  <style>\n    body { font-family: sans-serif; background: #f9f9f9; color: #222; }\n    .greeting { color: #007acc; font-size: 2em; margin-top: 2em; }\n  </style>\n</head>\n<body>\n  <div class="greeting">Hello, world!</div>\n  <script>\n    document.querySelector('.greeting').textContent += ' (from JavaScript!)';\n  </script>\n</body>\n</html>`,
     swift: `func greet(name: String) {\n    print("Hello, \\(name)!")\n}\n\ngreet(name: "world")`,
     kotlin: `fun main() {\n    println("Hello, world!")\n}`
   };
 
-  const userColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#F7D842', '#8A2BE2', '#FF8C00', '#00CED1'];
-  const getUserColor = (userId: string) => {
+  const getUserColor = useCallback((userId: string) => {
+      const userColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#F7D842', '#8A2BE2', '#FF8C00', '#00CED1'];
       let hash = 0;
       for (let i = 0; i < userId.length; i++) {
           hash = userId.charCodeAt(i) + ((hash << 5) - hash);
       }
       const index = Math.abs(hash % userColors.length);
       return userColors[index];
-  };
+  }, []);
 
   const commentSyntax: Record<string, (code: string) => string> = {
     javascript: code => code.split('\n').map(line => '// ' + line).join('\n'),
@@ -204,7 +204,7 @@ function Room() {
     return () => {
       socket.disconnect();
     };
-  }, [roomId, name, namePrompt]);
+  }, [roomId, name, namePrompt, language]);
 
   useEffect(() => {
     const interval = setInterval(() => {

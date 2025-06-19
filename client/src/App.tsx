@@ -12,7 +12,7 @@ import './App.css';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
 
-interface Room {
+interface RoomData {
   id: number;
   room_id: string;
   title: string;
@@ -20,7 +20,7 @@ interface Room {
 }
 
 function LandingPage() {
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [rooms, setRooms] = useState<RoomData[]>([]);
   const [title, setTitle] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -28,7 +28,7 @@ function LandingPage() {
   useEffect(() => {
     const fetchRooms = async () => {
       try {
-        const response = await axios.get<Room[]>(`${API_URL}/api/rooms`);
+        const response = await axios.get<RoomData[]>(`${API_URL}/api/rooms`);
         setRooms(response.data);
       } catch (err) {
         console.error('Error fetching rooms:', err);
@@ -45,7 +45,7 @@ function LandingPage() {
       return;
     }
     try {
-      const response = await axios.post<Room>(`${API_URL}/api/rooms`, { title });
+      const response = await axios.post<RoomData>(`${API_URL}/api/rooms`, { title });
       const newRoom = response.data;
       navigate(`/room/${newRoom.room_id}`);
     } catch (err) {
