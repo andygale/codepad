@@ -7,6 +7,7 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "migrate": "npx node-pg-migrate -m db/migrations --no-check-order up",
+    "migrate:prod": "DATABASE_URL=\"${DATABASE_URL}?ssl=true\" npx node-pg-migrate -m db/migrations --no-check-order up",
     "migrate:create": "npx node-pg-migrate create --dir db/migrations --migration-file-language js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
