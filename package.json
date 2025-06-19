@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "yarn install:all && yarn build:client && yarn server:dev",
     "start": "node server/src/index.js",
-    "build": "yarn install:all && yarn build:client",
+    "build": "yarn install:all && yarn --cwd server migrate && yarn build:client",
     "install:all": "yarn install && yarn --cwd client install && yarn --cwd server install",
     "build:client": "yarn --cwd client build",
     "server:start": "yarn --cwd server start",

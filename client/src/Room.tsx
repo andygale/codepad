@@ -448,7 +448,7 @@ function Room() {
                 <option key={lang.value} value={lang.value}>{lang.label}</option>
               ))}
             </select>
-            <button onClick={handleRun} disabled={isRunning} style={{ fontSize: 16 }}>
+            <button onClick={handleRun} disabled={isRunning} style={{ fontSize: 16, paddingRight: '1rem' }}>
               {isRunning ? 'Running...' : 'Run'}
             </button>
           </div>

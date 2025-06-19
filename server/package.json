@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "migrate": "node db/migrate.js",
+    "migrate:create": "node-pg-migrate create --dir db/migrations --migration-file-language js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -20,6 +22,7 @@
     "axios": "^1.9.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "node-pg-migrate": "^8.0.3",
     "pg": "^8.16.1",
     "socket.io": "^4.8.1"
   },
