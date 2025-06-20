@@ -19,6 +19,7 @@ interface RoomData {
   id: number;
   room_id: string;
   title: string;
+  creator: string;
   created_at: string;
 }
 
@@ -27,6 +28,7 @@ function LandingPage() {
   const [title, setTitle] = useState('');
   const [error, setError] = useState('');
   const [authError, setAuthError] = useState('');
+  const [showMyRooms, setShowMyRooms] = useState(false);
   const navigate = useNavigate();
   const { user, isAuthenticated, isAuthorized, logout, loading } = useAuth();
 
@@ -59,7 +61,10 @@ function LandingPage() {
     }
     
     try {
-      const response = await axios.post<RoomData>(`${API_URL}/api/rooms`, { title });
+      const response = await axios.post<RoomData>(`${API_URL}/api/rooms`, { 
+        title,
+        creator: user?.name 
+      });
       const newRoom = response.data;
       navigate(`/room/${newRoom.room_id}`);
     } catch (err) {
@@ -132,23 +137,39 @@ function LandingPage() {
         </div>
         <div className="room-list-section">
           <h2>Or Join an Existing Room</h2>
+          <div className="filter-container">
+            <label>
+              <input
+                type="checkbox"
+                checked={showMyRooms}
+                onChange={(e) => setShowMyRooms(e.target.checked)}
+              />
+              Only show my rooms
+            </label>
+          </div>
           {rooms.length > 0 ? (
             <div className="room-table-container">
               <table className="room-table">
                 <thead>
                   <tr>
                     <th>Room Title</th>
+                    <th>Creator</th>
                     <th>Created</th>
                     <th>Room ID</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rooms.map((room) => (
+                  {rooms
+                    .filter(room => !showMyRooms || (user && room.creator === user.name))
+                    .map((room) => (
                     <tr key={room.room_id} className="room-table-row">
                       <td className="room-title-cell">
                         <Link to={`/room/${room.room_id}`} className="room-link">
                           {room.title}
                         </Link>
+                      </td>
+                      <td className="room-creator-cell">
+                        {room.creator}
                       </td>
                       <td className="room-date-cell">
                         {new Date(room.created_at).toLocaleString()}

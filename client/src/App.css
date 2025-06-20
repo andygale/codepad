@@ -273,6 +273,11 @@ main {
   overflow-x: auto;
 }
 
+.filter-container {
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
 .room-table {
   width: 100%;
   border-collapse: collapse;

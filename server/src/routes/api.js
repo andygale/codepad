@@ -20,14 +20,14 @@ router.get('/rooms/:roomId', async (req, res) => {
 });
 
 router.post('/rooms', async (req, res) => {
-  const { title } = req.body;
-  if (!title) {
-    return res.status(400).json({ error: 'Missing required field: title' });
-  }
-  const newRoom = await roomService.createRoom(title);
-  if (newRoom) {
+  try {
+    const { title, creator } = req.body;
+    if (!title) {
+      return res.status(400).json({ error: 'Title is required' });
+    }
+    const newRoom = await roomService.createRoom(title, creator || 'Anonymous');
     res.status(201).json(newRoom);
-  } else {
+  } catch (error) {
     res.status(500).json({ error: 'Failed to create room' });
   }
 });
