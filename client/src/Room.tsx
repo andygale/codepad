@@ -563,7 +563,7 @@ function Room() {
             {copyMsg && <span style={{ color: '#0f0' }}>{copyMsg}</span>}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', paddingRight: '1rem' }}>
             <select
               value={language}
               onChange={handleLanguageChange}
@@ -573,9 +573,18 @@ function Room() {
                 <option key={lang.value} value={lang.value}>{lang.label}</option>
               ))}
             </select>
-            <button onClick={handleRun} disabled={isRunning} style={{ fontSize: 16, paddingRight: '1rem' }}>
+            <button onClick={handleRun} disabled={isRunning} style={{ fontSize: 16 }}>
               {isRunning ? 'Running...' : 'Run'}
             </button>
+            
+            {isAuthenticated && user ? (
+              <div className="user-info">
+                <img src={user.picture} alt={user.name} className="user-avatar" />
+                <span className="user-name">{user.name}</span>
+              </div>
+            ) : (
+              <span className="user-name">Guest</span>
+            )}
           </div>
         </div>
 
