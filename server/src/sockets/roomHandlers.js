@@ -19,8 +19,8 @@ const setupRoomHandlers = (io, socket) => {
     console.log(`User ${user.id} (${user.name}) is joining room ${roomId}`);
     socket.join(roomId);
     
-    // Get or create room state
-    const roomState = roomService.getOrCreateRoom(roomId);
+    // Get or create room state (now async)
+    const roomState = await roomService.getOrCreateRoom(roomId);
     
     // Add user to room
     const users = roomService.addUserToRoom(roomId, socket.id, user.name);
@@ -38,13 +38,13 @@ const setupRoomHandlers = (io, socket) => {
 
   socket.on('joinRoom', joinRoom);
 
-  socket.on('codeUpdate', ({ code, room }) => {
-    roomService.updateRoomCode(room, code);
+  socket.on('codeUpdate', async ({ code, room }) => {
+    await roomService.updateRoomCode(room, code);
     socket.to(room).emit('codeUpdate', { code });
   });
 
-  socket.on('languageUpdate', ({ language, code, room }) => {
-    roomService.updateRoomLanguage(room, language, code);
+  socket.on('languageUpdate', async ({ language, code, room }) => {
+    await roomService.updateRoomLanguage(room, language, code);
     socket.to(room).emit('languageUpdate', { language, code });
   });
 

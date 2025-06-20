@@ -43,7 +43,22 @@ class RoomService {
     }
   }
 
-  getOrCreateRoom(roomId) {
+  async getOrCreateRoom(roomId) {
+    // First try to get from database
+    const dbRoom = await this.getRoom(roomId);
+    if (dbRoom) {
+      // Initialize in-memory state from database if not already loaded
+      if (!this.roomState[roomId]) {
+        this.roomState[roomId] = {
+          code: dbRoom.code,
+          language: dbRoom.language,
+          outputHistory: []
+        };
+      }
+      return this.roomState[roomId];
+    }
+    
+    // Fallback to in-memory creation (shouldn't happen with persistent rooms)
     if (!this.roomState[roomId]) {
       this.roomState[roomId] = {
         code: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
@@ -54,15 +69,31 @@ class RoomService {
     return this.roomState[roomId];
   }
 
-  updateRoomCode(roomId, code) {
+  async updateRoomCode(roomId, code) {
+    // Update in-memory state
     if (!this.roomState[roomId]) this.roomState[roomId] = {};
     this.roomState[roomId].code = code;
+    
+    // Persist to database
+    try {
+      await db.query('UPDATE rooms SET code = $1 WHERE room_id = $2', [code, roomId]);
+    } catch (error) {
+      console.error(`Error updating code for room ${roomId}:`, error);
+    }
   }
 
-  updateRoomLanguage(roomId, language, code) {
+  async updateRoomLanguage(roomId, language, code) {
+    // Update in-memory state
     if (!this.roomState[roomId]) this.roomState[roomId] = {};
     this.roomState[roomId].language = language;
     this.roomState[roomId].code = code;
+    
+    // Persist to database
+    try {
+      await db.query('UPDATE rooms SET language = $1, code = $2 WHERE room_id = $3', [language, code, roomId]);
+    } catch (error) {
+      console.error(`Error updating language and code for room ${roomId}:`, error);
+    }
   }
 
   addOutputToRoom(roomId, output) {
