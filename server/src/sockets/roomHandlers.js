@@ -46,21 +46,17 @@ const setupRoomHandlers = (io, socket) => {
 
   socket.on('joinRoom', joinRoom);
 
-  socket.on('codeUpdate', async ({ code, room }) => {
+  socket.on('saveCode', async ({ code, room }) => {
     try {
-      console.log(`Code update for room ${room}: ${code.length} characters`);
       await roomService.updateRoomCode(room, code);
-      socket.to(room).emit('codeUpdate', { code });
+      console.log(`Successfully saved code for room ${room}: ${code.length} characters`);
     } catch (error) {
-      console.error(`Error updating code for room ${room}:`, error);
-      // Don't emit to other users if database write failed
+      console.error(`Error saving code for room ${room}:`, error);
     }
   });
 
   socket.on('codeDelta', ({ operations, room }) => {
     // Broadcast delta operations immediately for real-time collaboration
-    // No database update needed here - the codeUpdate handler will persist the full content
-    console.log(`Code delta for room ${room}: ${operations.length} operations`);
     socket.to(room).emit('codeDelta', { operations });
   });
 

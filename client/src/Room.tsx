@@ -21,7 +21,7 @@ const languages = [
 ];
 
 type ServerEvents = {
-  codeUpdate: (data: { code: string }) => void;
+  codeUpdate: (data: { code: string; changeInfo?: any }) => void;
   codeDelta: (data: { operations: any[] }) => void;
   languageUpdate: (data: { language: string; code?: string }) => void;
   runOutput: (data: { output: string }) => void;
@@ -34,8 +34,9 @@ type ServerEvents = {
 };
 
 type ClientEvents = {
-  codeUpdate: (data: { code: string; room: string }) => void;
+  codeUpdate: (data: { code: string; room: string; changeInfo?: any }) => void;
   codeDelta: (data: { operations: any[]; room: string }) => void;
+  saveCode: (data: { room: string; code: string }) => void;
   languageUpdate: (data: { language: string; code?: string; room: string }) => void;
   joinRoom: (data: { roomId: string; user: { id: string, name: string } }) => void;
   runOutput: (data: { output: string; room: string }) => void;
@@ -201,55 +202,18 @@ function Room() {
     });
 
     socket.on('codeUpdate', ({ code }) => {
-      if (!editorRef.current) return;
-      
-      // Store current cursor position
-      const currentPosition = editorRef.current.getPosition();
-      const currentSelection = editorRef.current.getSelection();
-      
-      // Only update if content is actually different
-      if (editorRef.current.getValue() !== code) {
+      if (editorRef.current && editorRef.current.getValue() !== code) {
         isRemoteUpdate.current = true;
-        
-        // Use pushEditOperations to preserve undo/redo and cursor positions
-        const model = editorRef.current.getModel();
-        if (model) {
-          const fullRange = model.getFullModelRange();
-          editorRef.current.pushUndoStop();
-          editorRef.current.executeEdits('remote-update', [{
-            range: fullRange,
-            text: code
-          }]);
-          editorRef.current.pushUndoStop();
-          
-          // Restore cursor position if it's still valid
-          if (currentPosition) {
-            const lineCount = model.getLineCount();
-            if (currentPosition.lineNumber <= lineCount) {
-              const lineLength = model.getLineLength(currentPosition.lineNumber);
-              if (currentPosition.column <= lineLength + 1) {
-                editorRef.current.setPosition(currentPosition);
-              }
-            }
-          }
-        }
-        
-        setCode(code);
-        lastKnownContent.current = code;
+        editorRef.current.setValue(code);
+        isRemoteUpdate.current = false;
       }
-      prevLanguage.current = language;
     });
     
     socket.on('codeDelta', ({ operations }) => {
-      // Temporarily disabled to prevent code explosion bug
-      // TODO: Fix delta operations
-      return;
-      
-      if (!editorRef.current || !monacoRef.current) return;
-      
-      // Apply operations directly without any React state updates
-      editorRef.current.executeEdits('remote-user', operations);
-      lastKnownContent.current = editorRef.current.getValue();
+      if (!editorRef.current) return;
+      isRemoteUpdate.current = true;
+      editorRef.current.executeEdits('remote-delta', operations);
+      isRemoteUpdate.current = false;
     });
 
     socket.on('languageUpdate', ({ language, code: newCode }) => {
@@ -290,32 +254,34 @@ function Room() {
     socket.on('remoteCursorChange', ({ position, socketId }) => {
       if (!monacoRef.current) return;
       remoteCursorActivity.current[socketId] = Date.now();
-      setUsers(currentUsers => {
-        const user = currentUsers.find(u => u.id === socketId);
-        setRemoteSelections(prev => ({
+      
+      // Update cursor position immediately without waiting for user list update
+      setRemoteSelections(prev => {
+        const user = users.find(u => u.id === socketId);
+        return {
           ...prev,
           [socketId]: {
             selection: new monacoRef.current.Range(position.lineNumber, position.column, position.lineNumber, position.column),
             name: user?.name || 'Anonymous'
           },
-        }));
-        return currentUsers;
+        };
       });
     });
 
     socket.on('remoteSelectionChange', ({ selection, socketId }) => {
       if (!monacoRef.current) return;
       remoteCursorActivity.current[socketId] = Date.now();
-      setUsers(currentUsers => {
-        const user = currentUsers.find(u => u.id === socketId);
-        setRemoteSelections(prev => ({
+      
+      // Update selection immediately without waiting for user list update
+      setRemoteSelections(prev => {
+        const user = users.find(u => u.id === socketId);
+        return {
           ...prev,
           [socketId]: {
             selection: new monacoRef.current.Range(selection.startLineNumber, selection.startColumn, selection.endLineNumber, selection.endColumn),
             name: user?.name || 'Anonymous'
           },
-        }));
-        return currentUsers;
+        };
       });
     });
 
@@ -353,26 +319,6 @@ function Room() {
 
     return () => clearInterval(interval);
   }, []); 
-
-  const handleCodeChange = (value: string | undefined) => {
-    // Don't process if this is a remote update
-    if (isRemoteUpdate.current) {
-      isRemoteUpdate.current = false;
-      return;
-    }
-    
-    const newCode = value || '';
-    
-    if (socketRef.current && roomId) {
-      // Temporarily disable delta operations - just send full content
-      // TODO: Fix delta calculation bug
-      socketRef.current.emit('codeUpdate', { code: newCode, room: roomId });
-    }
-    
-    // Update React state for local UI consistency
-    setCode(newCode);
-    lastKnownContent.current = newCode;
-  };
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLang = e.target.value;
@@ -429,15 +375,51 @@ function Room() {
     monacoRef.current = monaco;
     decorationsCollectionRef.current = editor.createDecorationsCollection();
 
+    // Main content change handler
+    editor.onDidChangeModelContent((event: any) => {
+      if (isRemoteUpdate.current) {
+        return;
+      }
+      if (socketRef.current && roomId) {
+        // Emit deltas for real-time sync
+        socketRef.current.emit('codeDelta', { operations: event.changes, room: roomId });
+
+        // Debounce saving the full content to the database
+        if (debounceTimeoutRef.current) {
+          clearTimeout(debounceTimeoutRef.current);
+        }
+        debounceTimeoutRef.current = setTimeout(() => {
+          if (editorRef.current) {
+            const fullCode = editorRef.current.getValue();
+            socketRef.current?.emit('saveCode', { room: roomId, code: fullCode });
+          }
+        }, 2000); // Save after 2 seconds of inactivity
+      }
+    });
+
+    // Debounce cursor updates to reduce lag
+    let cursorUpdateTimeout: NodeJS.Timeout | null = null;
+    let selectionUpdateTimeout: NodeJS.Timeout | null = null;
+
     editor.onDidChangeCursorPosition(() => {
       if (socketRef.current && roomId) {
-        socketRef.current.emit('cursorChange', { room: roomId, position: editor.getPosition() });
+        if (cursorUpdateTimeout) clearTimeout(cursorUpdateTimeout);
+        cursorUpdateTimeout = setTimeout(() => {
+          if (socketRef.current && roomId) {
+            socketRef.current.emit('cursorChange', { room: roomId, position: editor.getPosition() });
+          }
+        }, 50);
       }
     });
 
     editor.onDidChangeCursorSelection(() => {
       if (socketRef.current && roomId) {
-        socketRef.current.emit('selectionChange', { room: roomId, selection: editor.getSelection() });
+        if (selectionUpdateTimeout) clearTimeout(selectionUpdateTimeout);
+        selectionUpdateTimeout = setTimeout(() => {
+          if (socketRef.current && roomId) {
+            socketRef.current.emit('selectionChange', { room: roomId, selection: editor.getSelection() });
+          }
+        }, 50);
       }
     });
   }
@@ -607,7 +589,6 @@ function Room() {
               language={language === 'python3' ? 'python' : language === 'deno' ? 'typescript' : language}
               theme="vs-dark"
               value={code}
-              onChange={handleCodeChange}
               onMount={handleEditorDidMount}
               options={{ minimap: { enabled: false } }}
             />
