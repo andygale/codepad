@@ -70,30 +70,39 @@ class RoomService {
   }
 
   async updateRoomCode(roomId, code) {
-    // Update in-memory state
-    if (!this.roomState[roomId]) this.roomState[roomId] = {};
-    this.roomState[roomId].code = code;
-    
-    // Persist to database
+    // Persist to database first
     try {
       await db.query('UPDATE rooms SET code = $1 WHERE room_id = $2', [code, roomId]);
+      console.log(`Successfully updated code for room ${roomId}`);
     } catch (error) {
       console.error(`Error updating code for room ${roomId}:`, error);
+      throw error; // Re-throw so socket handler can handle it
     }
+    
+    // Update in-memory state only after successful database update
+    if (!this.roomState[roomId]) this.roomState[roomId] = {};
+    this.roomState[roomId].code = code;
   }
 
   async updateRoomLanguage(roomId, language, code) {
-    // Update in-memory state
+    // Persist to database first
+    try {
+      const result = await db.query('UPDATE rooms SET language = $1, code = $2 WHERE room_id = $3', [language, code, roomId]);
+      console.log(`Successfully updated language and code for room ${roomId}. Rows affected: ${result.rowCount}`);
+      
+      // Check if any rows were actually updated
+      if (result.rowCount === 0) {
+        throw new Error(`No room found with ID ${roomId}`);
+      }
+    } catch (error) {
+      console.error(`Error updating language and code for room ${roomId}:`, error);
+      throw error; // Re-throw so socket handler can handle it
+    }
+    
+    // Update in-memory state only after successful database update
     if (!this.roomState[roomId]) this.roomState[roomId] = {};
     this.roomState[roomId].language = language;
     this.roomState[roomId].code = code;
-    
-    // Persist to database
-    try {
-      await db.query('UPDATE rooms SET language = $1, code = $2 WHERE room_id = $3', [language, code, roomId]);
-    } catch (error) {
-      console.error(`Error updating language and code for room ${roomId}:`, error);
-    }
   }
 
   addOutputToRoom(roomId, output) {
