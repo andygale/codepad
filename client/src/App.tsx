@@ -81,18 +81,34 @@ function LandingPage() {
         <div className="room-list-section">
           <h2>Or Join an Existing Room</h2>
           {rooms.length > 0 ? (
-            <ul className="room-list">
-              {rooms.map((room) => (
-                <li key={room.room_id} className="room-list-item">
-                  <Link to={`/room/${room.room_id}`}>
-                    <span className="room-title">{room.title}</span>
-                    <span className="room-timestamp">
-                      {new Date(room.created_at).toLocaleString()}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <div className="room-table-container">
+              <table className="room-table">
+                <thead>
+                  <tr>
+                    <th>Room Title</th>
+                    <th>Created</th>
+                    <th>Room ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rooms.map((room) => (
+                    <tr key={room.room_id} className="room-table-row">
+                      <td className="room-title-cell">
+                        <Link to={`/room/${room.room_id}`} className="room-link">
+                          {room.title}
+                        </Link>
+                      </td>
+                      <td className="room-date-cell">
+                        {new Date(room.created_at).toLocaleString()}
+                      </td>
+                      <td className="room-id-cell">
+                        <code className="room-id">{room.room_id.slice(0, 8)}...</code>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <p>No rooms available. Create one to get started!</p>
           )}
