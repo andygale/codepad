@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import MonacoEditor from '@monaco-editor/react';
 import { io, Socket } from 'socket.io-client';
 import axios from 'axios';
+import { useAuth } from './AuthContext';
 import './App.css'; // Reusing styles for now
 
 const API_URL = process.env.REACT_APP_API_URL || '';
@@ -44,6 +45,7 @@ type ClientEvents = {
 
 function Room() {
   const { roomId } = useParams();
+  const { user, isAuthenticated } = useAuth();
   const [roomStatus, setRoomStatus] = useState<'loading' | 'found' | 'not_found'>('loading');
   const [roomTitle, setRoomTitle] = useState('');
   const [roomCreatedAt, setRoomCreatedAt] = useState('');
@@ -143,6 +145,16 @@ function Room() {
 
     return [operation];
   }, []);
+
+  // Set name automatically for authenticated users
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      // Extract first name from full name
+      const firstName = user.name.split(' ')[0];
+      setName(firstName);
+      setNamePrompt(false);
+    }
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
     const checkRoomExists = async () => {
