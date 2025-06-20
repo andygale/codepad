@@ -249,6 +249,8 @@ function Room() {
       }
       
       console.log('Applying remote languageUpdate:', language);
+      // Reset the flag since this is a genuine remote update
+      isLocalLanguageUpdate.current = false;
       setCode(newCode || '');
       setLanguage(language);
       prevLanguage.current = language;
@@ -362,19 +364,19 @@ function Room() {
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLang = e.target.value;
-    let newCode = languageExamples[newLang] || '';
-    if (code !== languageExamples[language]) {
-      const commentOut = commentSyntax[newLang] || (c => c);
-      newCode += '\n\n' + commentOut(code);
-    }
     
-    console.log('Local language change:', newLang);
+    // For now, let's use a simple approach: just use the new language example
+    // without preserving old code to prevent accumulation
+    const newCode = languageExamples[newLang] || '';
+    
+    console.log('Local language change:', newLang, 'using fresh example');
     isLocalLanguageUpdate.current = true;
     
-    // Reset the flag after a short delay as a safety measure
+    // Reset the flag after a longer delay to account for server debouncing
+    // This is a safety measure in case the server response gets lost
     setTimeout(() => {
       isLocalLanguageUpdate.current = false;
-    }, 1000);
+    }, 2000);
     
     setCode(newCode);
     setLanguage(newLang);

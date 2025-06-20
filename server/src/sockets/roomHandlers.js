@@ -80,10 +80,8 @@ const setupRoomHandlers = (io, socket) => {
         console.log(`Successfully updated database for room ${room} to language: ${language}`);
         
         // Only broadcast to other users after successful database update
+        // Don't emit back to sender to avoid race conditions with local state
         socket.to(room).emit('languageUpdate', { language, code });
-        
-        // Also emit back to sender to confirm the change was persisted
-        socket.emit('languageUpdate', { language, code });
         
         console.log(`Language update broadcast completed for room ${room}`);
         
@@ -93,6 +91,7 @@ const setupRoomHandlers = (io, socket) => {
         console.error(`Error updating language for room ${room}:`, error);
         
         // If database update failed, send the current state back to the user
+        // We need to revert their local state to match the database
         try {
           const roomState = await roomService.getOrCreateRoom(room);
           socket.emit('languageUpdate', { 
