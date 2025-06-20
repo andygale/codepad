@@ -8,6 +8,9 @@ import {
 } from 'react-router-dom';
 import axios from 'axios';
 import Room from './Room';
+import GuestJoin from './GuestJoin';
+import { AuthProvider, useAuth } from './AuthContext';
+import GoogleOneTap from './GoogleOneTap';
 import './App.css';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
@@ -23,10 +26,14 @@ function LandingPage() {
   const [rooms, setRooms] = useState<RoomData[]>([]);
   const [title, setTitle] = useState('');
   const [error, setError] = useState('');
+  const [authError, setAuthError] = useState('');
   const navigate = useNavigate();
+  const { user, isAuthenticated, isAuthorized, logout, loading } = useAuth();
 
   useEffect(() => {
     const fetchRooms = async () => {
+      if (!isAuthorized) return;
+      
       try {
         const response = await axios.get<RoomData[]>(`${API_URL}/api/rooms`);
         setRooms(response.data);
@@ -36,14 +43,21 @@ function LandingPage() {
       }
     };
     fetchRooms();
-  }, []);
+  }, [isAuthorized]);
 
   const handleCreateRoom = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    if (!isAuthorized) {
+      setError('You must be logged in to create rooms.');
+      return;
+    }
+    
     if (!title.trim()) {
       setError('Title cannot be empty.');
       return;
     }
+    
     try {
       const response = await axios.post<RoomData>(`${API_URL}/api/rooms`, { title });
       const newRoom = response.data;
@@ -54,13 +68,51 @@ function LandingPage() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="landing-page">
+        <header className="app-header">
+          <h1>Loading...</h1>
+        </header>
+      </div>
+    );
+  }
+
   return (
     <div className="landing-page">
       <header className="app-header">
-        <h1>Welcome to Codepad</h1>
-        <p>Real-time collaborative code editor.</p>
+        <div className="header-content">
+          <div>
+            <h1>Welcome to Codepad</h1>
+            <p>Real-time collaborative code editor.</p>
+          </div>
+          {isAuthenticated && (
+            <div className="user-info">
+              <img src={user?.picture} alt={user?.name} className="user-avatar" />
+              <span className="user-name">{user?.name}</span>
+              <button onClick={logout} className="logout-button">Logout</button>
+            </div>
+          )}
+        </div>
       </header>
-      <main>
+      
+      {!isAuthenticated && (
+        <div className="auth-section">
+          <h2>Login Required</h2>
+          <p>Please sign in with your Google account to view and create rooms.</p>
+          <GoogleOneTap 
+            onSuccess={() => setAuthError('')}
+            onError={(error) => setAuthError('Login failed. Please try again.')}
+          />
+          {authError && <p className="error-message">{authError}</p>}
+          <div className="guest-access">
+            <p>Or <Link to="/join" className="guest-link">join an existing room as a guest</Link></p>
+          </div>
+        </div>
+      )}
+
+      {isAuthorized && (
+        <main>
         <div className="create-room-section">
           <h2>Create a New Room</h2>
           <form onSubmit={handleCreateRoom} className="create-room-form">
@@ -113,21 +165,25 @@ function LandingPage() {
             <p>No rooms available. Create one to get started!</p>
           )}
         </div>
-      </main>
+        </main>
+      )}
     </div>
   );
 }
 
 function App() {
   return (
-    <Router>
-      <div className="App">
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/room/:roomId" element={<Room />} />
-        </Routes>
-      </div>
-    </Router>
+    <AuthProvider>
+      <Router>
+        <div className="App">
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/join" element={<GuestJoin />} />
+            <Route path="/room/:roomId" element={<Room />} />
+          </Routes>
+        </div>
+      </Router>
+    </AuthProvider>
   );
 }
 
