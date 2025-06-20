@@ -21,6 +21,7 @@ const languages = [
 
 type ServerEvents = {
   codeUpdate: (data: { code: string }) => void;
+  codeDelta: (data: { operations: any[] }) => void;
   languageUpdate: (data: { language: string; code?: string }) => void;
   runOutput: (data: { output: string }) => void;
   remoteCursorChange: (data: { position: any; socketId: string }) => void;
@@ -33,6 +34,7 @@ type ServerEvents = {
 
 type ClientEvents = {
   codeUpdate: (data: { code: string; room: string }) => void;
+  codeDelta: (data: { operations: any[]; room: string }) => void;
   languageUpdate: (data: { language: string; code?: string; room: string }) => void;
   joinRoom: (data: { roomId: string; user: { id: string, name: string } }) => void;
   runOutput: (data: { output: string; room: string }) => void;
@@ -60,6 +62,9 @@ function Room() {
   const remoteCursorActivity = useRef<Record<string, number>>({});
   const [visibleCursorLabels, setVisibleCursorLabels] = useState<Record<string, boolean>>({});
   const isRemoteUpdate = useRef(false);
+  const isLocalLanguageUpdate = useRef(false);
+  const lastKnownContent = useRef(code);
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const prevLanguage = useRef(language);
   const [copyMsg, setCopyMsg] = useState('');
   const [iframeHtml, setIframeHtml] = useState('');
@@ -94,6 +99,50 @@ function Room() {
     cpp: code => code.split('\n').map(line => '// ' + line).join('\n'),
     java: code => code.split('\n').map(line => '// ' + line).join('\n'),
   };
+
+  // Function to calculate edit operations between two strings
+  const calculateEditOperations = useCallback((oldText: string, newText: string) => {
+    if (!editorRef.current || !monacoRef.current) return [];
+    
+    const model = editorRef.current.getModel();
+    if (!model) return [];
+
+    // Simple diff algorithm - find the range that changed
+    let start = 0;
+    let oldEnd = oldText.length;
+    let newEnd = newText.length;
+
+    // Find common prefix
+    while (start < oldEnd && start < newEnd && oldText[start] === newText[start]) {
+      start++;
+    }
+
+    // Find common suffix
+    while (oldEnd > start && newEnd > start && oldText[oldEnd - 1] === newText[newEnd - 1]) {
+      oldEnd--;
+      newEnd--;
+    }
+
+    if (start === oldEnd && start === newEnd) {
+      return []; // No changes
+    }
+
+    // Convert character positions to Monaco positions
+    const startPos = model.getPositionAt(start);
+    const endPos = model.getPositionAt(oldEnd);
+    
+    const operation = {
+      range: new monacoRef.current.Range(
+        startPos.lineNumber,
+        startPos.column,
+        endPos.lineNumber,
+        endPos.column
+      ),
+      text: newText.substring(start, newEnd)
+    };
+
+    return [operation];
+  }, []);
 
   useEffect(() => {
     const checkRoomExists = async () => {
@@ -140,11 +189,66 @@ function Room() {
     });
 
     socket.on('codeUpdate', ({ code }) => {
-      isRemoteUpdate.current = true;
-      setCode(code);
+      if (!editorRef.current) return;
+      
+      // Store current cursor position
+      const currentPosition = editorRef.current.getPosition();
+      const currentSelection = editorRef.current.getSelection();
+      
+      // Only update if content is actually different
+      if (editorRef.current.getValue() !== code) {
+        isRemoteUpdate.current = true;
+        
+        // Use pushEditOperations to preserve undo/redo and cursor positions
+        const model = editorRef.current.getModel();
+        if (model) {
+          const fullRange = model.getFullModelRange();
+          editorRef.current.pushUndoStop();
+          editorRef.current.executeEdits('remote-update', [{
+            range: fullRange,
+            text: code
+          }]);
+          editorRef.current.pushUndoStop();
+          
+          // Restore cursor position if it's still valid
+          if (currentPosition) {
+            const lineCount = model.getLineCount();
+            if (currentPosition.lineNumber <= lineCount) {
+              const lineLength = model.getLineLength(currentPosition.lineNumber);
+              if (currentPosition.column <= lineLength + 1) {
+                editorRef.current.setPosition(currentPosition);
+              }
+            }
+          }
+        }
+        
+        setCode(code);
+        lastKnownContent.current = code;
+      }
       prevLanguage.current = language;
     });
+    
+    socket.on('codeDelta', ({ operations }) => {
+      // Temporarily disabled to prevent code explosion bug
+      // TODO: Fix delta operations
+      return;
+      
+      if (!editorRef.current || !monacoRef.current) return;
+      
+      // Apply operations directly without any React state updates
+      editorRef.current.executeEdits('remote-user', operations);
+      lastKnownContent.current = editorRef.current.getValue();
+    });
+
     socket.on('languageUpdate', ({ language, code: newCode }) => {
+      // Ignore language updates that we triggered ourselves
+      if (isLocalLanguageUpdate.current) {
+        console.log('Ignoring languageUpdate - was triggered locally');
+        isLocalLanguageUpdate.current = false;
+        return;
+      }
+      
+      console.log('Applying remote languageUpdate:', language);
       setCode(newCode || '');
       setLanguage(language);
       prevLanguage.current = language;
@@ -203,8 +307,12 @@ function Room() {
 
     return () => {
       socket.disconnect();
+      // Clean up debounce timeout
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
     };
-  }, [roomId, name, namePrompt, language]);
+  }, [roomId, name, namePrompt]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -233,11 +341,23 @@ function Room() {
   }, []); 
 
   const handleCodeChange = (value: string | undefined) => {
-    setCode(value || '');
-    if (!isRemoteUpdate.current && socketRef.current && roomId) {
-      socketRef.current.emit('codeUpdate', { code: value || '', room: roomId });
+    // Don't process if this is a remote update
+    if (isRemoteUpdate.current) {
+      isRemoteUpdate.current = false;
+      return;
     }
-    isRemoteUpdate.current = false;
+    
+    const newCode = value || '';
+    
+    if (socketRef.current && roomId) {
+      // Temporarily disable delta operations - just send full content
+      // TODO: Fix delta calculation bug
+      socketRef.current.emit('codeUpdate', { code: newCode, room: roomId });
+    }
+    
+    // Update React state for local UI consistency
+    setCode(newCode);
+    lastKnownContent.current = newCode;
   };
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -247,6 +367,15 @@ function Room() {
       const commentOut = commentSyntax[newLang] || (c => c);
       newCode += '\n\n' + commentOut(code);
     }
+    
+    console.log('Local language change:', newLang);
+    isLocalLanguageUpdate.current = true;
+    
+    // Reset the flag after a short delay as a safety measure
+    setTimeout(() => {
+      isLocalLanguageUpdate.current = false;
+    }, 1000);
+    
     setCode(newCode);
     setLanguage(newLang);
     prevLanguage.current = newLang;

@@ -57,6 +57,13 @@ const setupRoomHandlers = (io, socket) => {
     }
   });
 
+  socket.on('codeDelta', ({ operations, room }) => {
+    // Broadcast delta operations immediately for real-time collaboration
+    // No database update needed here - the codeUpdate handler will persist the full content
+    console.log(`Code delta for room ${room}: ${operations.length} operations`);
+    socket.to(room).emit('codeDelta', { operations });
+  });
+
   socket.on('languageUpdate', async ({ language, code, room }) => {
     // Clear any existing timeout for this room
     if (languageUpdateTimeouts.has(room)) {
