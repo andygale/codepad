@@ -553,9 +553,11 @@ function Room() {
       <header className="App-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '1rem 2rem', boxSizing: 'border-box', marginBottom: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <Link to="/" style={{ color: '#61dafb', textDecoration: 'none', fontSize: '1em' }}>
-              Home
-            </Link>
+            {isAuthenticated && (
+              <Link to="/" style={{ color: '#61dafb', textDecoration: 'none', fontSize: '1em' }}>
+                Home
+              </Link>
+            )}
             <div>
               <h1 style={{ margin: 0, fontSize: '1.5em' }}>{roomTitle}</h1>
               <p style={{ margin: 0, fontSize: '0.8em', color: '#aaa' }}>
