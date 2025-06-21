@@ -509,3 +509,26 @@ main {
     padding: 2rem;
   }
 }
+
+/* Room Page Button Styles */
+.room-button {
+  padding: 0.75rem 1.5rem;
+  background: #61dafb;
+  color: #000;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.room-button:hover:not(:disabled) {
+  background: #4fa8c5;
+}
+
+.room-button:disabled {
+  background: #555;
+  color: #999;
+  cursor: not-allowed;
+}

@@ -347,15 +347,18 @@ function Room() {
   const handleRun = async () => {
     setIsRunning(true);
     try {
+      // Get the current code directly from the editor
+      const currentCode = editorRef.current ? editorRef.current.getValue() : code;
+      
       if (language === 'html') {
-        setIframeHtml(code);
+        setIframeHtml(currentCode);
         if (socketRef.current && roomId) {
-          socketRef.current.emit('runOutput', { output: code, room: roomId });
+          socketRef.current.emit('runOutput', { output: currentCode, room: roomId });
         }
         return;
       }
       const res = await axios.post('/api/execute', {
-        code,
+        code: currentCode,
         language,
       });
       if (socketRef.current && roomId) {
@@ -534,7 +537,7 @@ function Room() {
                 style={{ fontSize: 18, padding: 8 }}
                 autoFocus
               />
-              <button type="submit" style={{ fontSize: 18, marginLeft: 12 }}>
+              <button type="submit" className="room-button">
                 Join
               </button>
             </form>
@@ -546,9 +549,9 @@ function Room() {
   return (
     <div className="App">
       <header className="App-header">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '1rem 2rem', boxSizing: 'border-box', marginBottom: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <Link to="/" style={{ color: '#61dafb', textDecoration: 'none', fontSize: '1em', paddingLeft: '1rem' }}>
+            <Link to="/" style={{ color: '#61dafb', textDecoration: 'none', fontSize: '1em' }}>
               Home
             </Link>
             <div>
@@ -557,13 +560,16 @@ function Room() {
                 Created: {roomCreatedAt ? new Date(roomCreatedAt).toLocaleString() : '...'}
               </p>
             </div>
-            <button onClick={handleCopyUrl} style={{ fontSize: 14, padding: '4px 10px', cursor: 'pointer' }}>
+            <button 
+              onClick={handleCopyUrl} 
+              className="room-button"
+            >
               Copy Room URL
             </button>
             {copyMsg && <span style={{ color: '#0f0' }}>{copyMsg}</span>}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', paddingRight: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <select
               value={language}
               onChange={handleLanguageChange}
@@ -573,7 +579,11 @@ function Room() {
                 <option key={lang.value} value={lang.value}>{lang.label}</option>
               ))}
             </select>
-            <button onClick={handleRun} disabled={isRunning} style={{ fontSize: 16 }}>
+            <button 
+              onClick={handleRun} 
+              disabled={isRunning} 
+              className="room-button"
+            >
               {isRunning ? 'Running...' : 'Run'}
             </button>
             

@@ -11,10 +11,24 @@ class RoomService {
 
   async createRoom(title, creator) {
     const roomId = randomUUID();
+    const defaultCode = `class Greeter {
+  message: string;
+  constructor(message: string) {
+    this.message = message;
+  }
+  greet(): void {
+    console.log(this.message);
+  }
+}
+
+const greeter = new Greeter('Hello, world!');
+greeter.greet();`;
+    const defaultLanguage = 'deno';
+    
     try {
       const result = await db.query(
-        'INSERT INTO rooms (room_id, title, creator) VALUES ($1, $2, $3) RETURNING *',
-        [roomId, title, creator]
+        'INSERT INTO rooms (room_id, title, creator, code, language) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [roomId, title, creator, defaultCode, defaultLanguage]
       );
       return result.rows[0];
     } catch (error) {
