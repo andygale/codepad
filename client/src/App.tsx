@@ -20,6 +20,7 @@ interface RoomData {
   room_id: string;
   title: string;
   creator: string;
+  creator_email?: string;
   created_at: string;
 }
 
@@ -63,7 +64,8 @@ function LandingPage() {
     try {
       const response = await axios.post<RoomData>(`${API_URL}/api/rooms`, { 
         title,
-        creator: user?.name 
+        creator: user?.name,
+        creator_email: user?.email
       });
       const newRoom = response.data;
       navigate(`/room/${newRoom.room_id}`);
@@ -170,6 +172,7 @@ function LandingPage() {
                       </td>
                       <td className="room-creator-cell">
                         {room.creator}
+                        {room.creator_email && <div className="creator-email">{room.creator_email}</div>}
                       </td>
                       <td className="room-date-cell">
                         {new Date(room.created_at).toLocaleString()}

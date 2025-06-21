@@ -9,7 +9,7 @@ class RoomService {
     this.userNames = {};
   }
 
-  async createRoom(title, creator) {
+  async createRoom(title, creator, creator_email) {
     const roomId = randomUUID();
     const defaultCode = `class Greeter {
   message: string;
@@ -27,8 +27,8 @@ greeter.greet();`;
     
     try {
       const result = await db.query(
-        'INSERT INTO rooms (room_id, title, creator, code, language) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [roomId, title, creator, defaultCode, defaultLanguage]
+        'INSERT INTO rooms (room_id, title, creator, creator_email, code, language) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        [roomId, title, creator, creator_email, defaultCode, defaultLanguage]
       );
       return result.rows[0];
     } catch (error) {

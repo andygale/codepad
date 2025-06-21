@@ -325,6 +325,11 @@ main {
   color: #61dafb !important;
 }
 
+.creator-email {
+  font-size: 0.8rem;
+  color: #999;
+}
+
 .room-date-cell {
   color: #ccc;
   font-size: 0.9rem;

@@ -21,11 +21,11 @@ router.get('/rooms/:roomId', async (req, res) => {
 
 router.post('/rooms', async (req, res) => {
   try {
-    const { title, creator } = req.body;
+    const { title, creator, creator_email } = req.body;
     if (!title) {
       return res.status(400).json({ error: 'Title is required' });
     }
-    const newRoom = await roomService.createRoom(title, creator || 'Anonymous');
+    const newRoom = await roomService.createRoom(title, creator || 'Anonymous', creator_email);
     res.status(201).json(newRoom);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create room' });
