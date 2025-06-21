@@ -6,6 +6,7 @@ import axios from 'axios';
 import { useAuth } from './AuthContext';
 import './App.css'; // Reusing styles for now
 import PlaybackModal from './PlaybackModal';
+import Split from 'react-split';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
 
@@ -605,40 +606,48 @@ function Room() {
         </div>
 
         <div className="main-content">
-          <div className="editor-container">
-            <div style={{ marginBottom: 12, textAlign: 'left', color: '#aaa', fontSize: 14 }}>
-              <strong>Users in room:</strong> {users.map((u: { id: string, name: string }) => u.name).join(', ')}
-            </div>
-            <MonacoEditor
-              height="100%"
-              language={language === 'python3' ? 'python' : language === 'deno' ? 'typescript' : language}
-              theme="vs-dark"
-              value={code}
-              onMount={handleEditorDidMount}
-              options={{ minimap: { enabled: false } }}
-            />
-          </div>
-          <div className="output-container">
-            <h2>Output</h2>
-            {language === 'html' ? (
-              <iframe
-                title="Web Output"
-                srcDoc={iframeHtml}
-                style={{ width: '100%', height: '100%', border: '1px solid #444', background: '#fff', borderRadius: 6 }}
-              />
-            ) : (
-              <div className="output-box">
-                {outputBlocks.map((block, idx) => (
-                  <div key={idx} style={{ marginBottom: 16 }}>
-                    <div style={{ color: '#aaa', fontSize: 12, marginBottom: 4 }}>
-                      Run at {block.timestamp}
-                    </div>
-                    <pre style={{ margin: 0 }}>{block.output}</pre>
-                  </div>
-                ))}
+          <Split
+            className="split"
+            sizes={[66, 34]}
+            minSize={200}
+            gutterSize={8}
+            snapOffset={0}
+          >
+            <div className="editor-container">
+              <div style={{ marginBottom: 12, textAlign: 'left', color: '#aaa', fontSize: 14 }}>
+                <strong>Users in room:</strong> {users.map((u: { id: string, name: string }) => u.name).join(', ')}
               </div>
-            )}
-          </div>
+              <MonacoEditor
+                height="100%"
+                language={language === 'python3' ? 'python' : language === 'deno' ? 'typescript' : language}
+                theme="vs-dark"
+                value={code}
+                onMount={handleEditorDidMount}
+                options={{ minimap: { enabled: false } }}
+              />
+            </div>
+            <div className="output-container">
+              <h2>Output</h2>
+              {language === 'html' ? (
+                <iframe
+                  title="Web Output"
+                  srcDoc={iframeHtml}
+                  style={{ width: '100%', height: '100%', border: '1px solid #444', background: '#fff', borderRadius: 6 }}
+                />
+              ) : (
+                <div className="output-box">
+                  {outputBlocks.map((block, idx) => (
+                    <div key={idx} style={{ marginBottom: 16 }}>
+                      <div style={{ color: '#aaa', fontSize: 12, marginBottom: 4 }}>
+                        Run at {block.timestamp}
+                      </div>
+                      <pre style={{ margin: 0 }}>{block.output}</pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Split>
         </div>
       </header>
       <PlaybackModal
