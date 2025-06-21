@@ -37,11 +37,12 @@ type ServerEvents = {
 
 type ClientEvents = {
   codeUpdate: (data: { code: string; room: string; changeInfo?: any }) => void;
-  codeDelta: (data: { operations: any[]; room: string }) => void;
+  codeDelta: (data: { operations: any[]; room: string; codeSnapshot: string }) => void;
   saveCode: (data: { room: string; code: string }) => void;
   languageUpdate: (data: { language: string; code?: string; room: string }) => void;
   joinRoom: (data: { roomId: string; user: { id: string, name: string } }) => void;
   runOutput: (data: { output: string; room: string }) => void;
+  clearOutput: (data: { room: string }) => void;
   cursorChange: (data: { room: string; position: any }) => void;
   selectionChange: (data: { room: string; selection: any }) => void;
 };
@@ -376,6 +377,12 @@ function Room() {
     }
   };
 
+  const handleClearOutput = () => {
+    if (socketRef.current && roomId) {
+      socketRef.current.emit('clearOutput', { room: roomId });
+    }
+  };
+
   const handleEditorDidMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
@@ -388,7 +395,7 @@ function Room() {
       }
       if (socketRef.current && roomId) {
         // Emit deltas for real-time sync
-        socketRef.current.emit('codeDelta', { operations: event.changes, room: roomId });
+        socketRef.current.emit('codeDelta', { operations: event.changes, room: roomId, codeSnapshot: editorRef.current.getValue() });
 
         // Debounce saving the full content to the database
         if (debounceTimeoutRef.current) {
@@ -627,7 +634,12 @@ function Room() {
               />
             </div>
             <div className="output-container">
-              <h2>Output</h2>
+              <div className="output-header">
+                <h2>Output</h2>
+                <button onClick={handleClearOutput} className="clear-button">
+                  Clear
+                </button>
+              </div>
               {language === 'html' ? (
                 <iframe
                   title="Web Output"

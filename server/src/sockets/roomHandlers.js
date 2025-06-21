@@ -121,6 +121,11 @@ const setupRoomHandlers = (io, socket) => {
     io.in(room).emit('outputHistory', { outputHistory });
   });
 
+  socket.on('clearOutput', ({ room }) => {
+    const outputHistory = roomService.clearOutputHistory(room);
+    io.in(room).emit('outputHistory', { outputHistory });
+  });
+
   socket.on('disconnecting', () => {
     for (const room of socket.rooms) {
       if (room !== socket.id) { // Skip the socket's own room

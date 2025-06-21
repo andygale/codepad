@@ -146,6 +146,13 @@ greeter.greet();`;
     return this.roomState[roomId].outputHistory;
   }
 
+  clearOutputHistory(roomId) {
+    if (this.roomState[roomId]) {
+      this.roomState[roomId].outputHistory = [];
+    }
+    return [];
+  }
+
   addUserToRoom(roomId, socketId, name) {
     if (!this.userNames[roomId]) this.userNames[roomId] = {};
     this.userNames[roomId][socketId] = { name: name || 'Anonymous', id: socketId };
