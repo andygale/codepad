@@ -169,7 +169,6 @@ function LandingPage() {
                     <th>Room Title</th>
                     <th>Creator</th>
                     <th>Created</th>
-                    <th>Room ID</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -188,9 +187,6 @@ function LandingPage() {
                       </td>
                       <td className="room-date-cell">
                         {new Date(room.created_at).toLocaleString()}
-                      </td>
-                      <td className="room-id-cell">
-                        <code className="room-id">{room.room_id.slice(0, 8)}...</code>
                       </td>
                     </tr>
                   ))}

@@ -10,7 +10,7 @@ class RoomService {
   }
 
   async createRoom(title, creator, creator_email) {
-    const roomId = randomUUID();
+    const roomId = randomUUID().replace(/-/g, '').substring(0, 12);
     const defaultCode = `class Greeter {
   message: string;
   constructor(message: string) {
@@ -185,9 +185,9 @@ greeter.greet();`;
   // =========================
   // Playback helpers
   // =========================
-  async recordSnapshot(roomUuid, code) {
+  async recordSnapshot(roomId, code) {
     // ensure room exists
-    const roomRow = await this.getRoom(roomUuid);
+    const roomRow = await this.getRoom(roomId);
     if (!roomRow) return;
     const dbRoomId = roomRow.id;
 
@@ -201,8 +201,8 @@ greeter.greet();`;
     );
   }
 
-  async getHistory(roomUuid) {
-    const roomRow = await this.getRoom(roomUuid);
+  async getHistory(roomId) {
+    const roomRow = await this.getRoom(roomId);
     if (!roomRow) return [];
     const dbRoomId = roomRow.id;
     const res = await db.query(
