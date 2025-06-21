@@ -47,13 +47,32 @@ greeter.greet();`;
     }
   }
 
-  async getAllRooms() {
+  async getAllRooms(page = 1, limit = 10, creator_email = null) {
+    const offset = (page - 1) * limit;
+    const queryParams = [limit, offset];
+    const countParams = [];
+    let whereClause = '';
+
+    if (creator_email) {
+      whereClause = 'WHERE creator_email = $3';
+      queryParams.push(creator_email);
+      countParams.push(creator_email);
+    }
+    const countQuery = `SELECT COUNT(*) FROM rooms ${creator_email ? 'WHERE creator_email = $1' : ''}`;
+
     try {
-      const result = await db.query('SELECT * FROM rooms ORDER BY created_at DESC');
-      return result.rows;
+      const roomsResult = await db.query(
+        `SELECT * FROM rooms ${whereClause} ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+        queryParams
+      );
+      const countResult = await db.query(countQuery, countParams);
+      return {
+        rooms: roomsResult.rows,
+        totalCount: parseInt(countResult.rows[0].count, 10),
+      };
     } catch (error) {
       console.error('Error getting all rooms:', error);
-      return [];
+      return { rooms: [], totalCount: 0 };
     }
   }
 

@@ -5,8 +5,15 @@ const roomService = require('../services/roomService');
 const router = express.Router();
 
 router.get('/rooms', async (req, res) => {
-  const rooms = await roomService.getAllRooms();
-  res.json(rooms);
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = 10;
+  const creatorEmail = req.query.creatorEmail || null;
+
+  const { rooms, totalCount } = await roomService.getAllRooms(page, limit, creatorEmail);
+  res.json({
+    rooms,
+    totalCount,
+  });
 });
 
 router.get('/rooms/:roomId', async (req, res) => {

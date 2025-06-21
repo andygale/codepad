@@ -542,3 +542,8 @@ main {
   color: #999;
   cursor: not-allowed;
 }
+
+.pagination-container {
+  margin-top: 2rem;
+  text-align: center;
+}
