@@ -155,6 +155,36 @@ greeter.greet();`;
     // TODO: Implement database loading
     console.log(`Loading room ${roomId} from database`);
   }
+
+  // =========================
+  // Playback helpers
+  // =========================
+  async recordSnapshot(roomUuid, code) {
+    // ensure room exists
+    const roomRow = await this.getRoom(roomUuid);
+    if (!roomRow) return;
+    const dbRoomId = roomRow.id;
+
+    // get next sequence number
+    const seqRes = await db.query('SELECT COALESCE(MAX(seq),0)+1 AS next FROM edit_history WHERE room_id=$1', [dbRoomId]);
+    const seq = seqRes.rows[0].next;
+
+    await db.query(
+      'INSERT INTO edit_history (room_id, seq, code_snapshot) VALUES ($1,$2,$3)',
+      [dbRoomId, seq, code]
+    );
+  }
+
+  async getHistory(roomUuid) {
+    const roomRow = await this.getRoom(roomUuid);
+    if (!roomRow) return [];
+    const dbRoomId = roomRow.id;
+    const res = await db.query(
+      'SELECT seq, code_snapshot FROM edit_history WHERE room_id=$1 ORDER BY seq ASC',
+      [dbRoomId]
+    );
+    return res.rows;
+  }
 }
 
 module.exports = new RoomService(); 

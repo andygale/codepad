@@ -54,4 +54,15 @@ router.post('/execute', async (req, res) => {
   }
 });
 
+router.get('/rooms/:roomId/history', async (req,res)=>{
+  try{
+    const {roomId}=req.params;
+    const history=await roomService.getHistory(roomId);
+    res.json(history);
+  }catch(err){
+    console.error('history error',err);
+    res.status(500).json({error:'Failed to fetch history'});
+  }
+});
+
 module.exports = router; 

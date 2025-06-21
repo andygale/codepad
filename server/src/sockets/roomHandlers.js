@@ -49,6 +49,7 @@ const setupRoomHandlers = (io, socket) => {
   socket.on('saveCode', async ({ code, room }) => {
     try {
       await roomService.updateRoomCode(room, code);
+      await roomService.recordSnapshot(room, code);
       console.log(`Successfully saved code for room ${room}: ${code.length} characters`);
     } catch (error) {
       console.error(`Error saving code for room ${room}:`, error);

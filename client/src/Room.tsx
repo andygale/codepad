@@ -5,6 +5,7 @@ import { io, Socket } from 'socket.io-client';
 import axios from 'axios';
 import { useAuth } from './AuthContext';
 import './App.css'; // Reusing styles for now
+import PlaybackModal from './PlaybackModal';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
 
@@ -71,6 +72,7 @@ function Room() {
   const prevLanguage = useRef(language);
   const [copyMsg, setCopyMsg] = useState('');
   const [iframeHtml, setIframeHtml] = useState('');
+  const [showPlayback, setShowPlayback] = useState(false);
 
   const languageExamples: Record<string, string> = {
     javascript: `class Greeter {\n  constructor(message) {\n    this.message = message;\n  }\n  greet() {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
@@ -560,12 +562,14 @@ function Room() {
                 Created: {roomCreatedAt ? new Date(roomCreatedAt).toLocaleString() : '...'}
               </p>
             </div>
-            <button 
-              onClick={handleCopyUrl} 
-              className="room-button"
-            >
+            <button className="room-button" onClick={handleCopyUrl}>
               Copy Room URL
             </button>
+            {isAuthenticated && (
+              <button className="room-button" onClick={() => setShowPlayback(true)}>
+                Playback
+              </button>
+            )}
             {copyMsg && <span style={{ color: '#0f0' }}>{copyMsg}</span>}
           </div>
 
@@ -635,6 +639,12 @@ function Room() {
           </div>
         </div>
       </header>
+      <PlaybackModal
+        roomId={roomId!}
+        language={language}
+        visible={showPlayback}
+        onClose={() => setShowPlayback(false)}
+      />
     </div>
   );
 }
