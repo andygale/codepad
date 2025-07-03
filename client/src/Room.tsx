@@ -76,6 +76,19 @@ function Room() {
   const [iframeHtml, setIframeHtml] = useState('');
   const [showPlayback, setShowPlayback] = useState(false);
 
+  // Refs to access current values in socket event handlers without causing re-renders
+  const languageRef = useRef(language);
+  const usersRef = useRef(users);
+
+  // Update refs when state changes
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
+
+  useEffect(() => {
+    usersRef.current = users;
+  }, [users]);
+
   const languageExamples: Record<string, string> = {
     javascript: `class Greeter {\n  constructor(message) {\n    this.message = message;\n  }\n  greet() {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
     typescript: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
@@ -188,7 +201,7 @@ function Room() {
     });
     socket.on('outputHistory', ({ outputHistory }) => {
       setOutputBlocks(outputHistory);
-      if (language === 'html' && outputHistory.length > 0) {
+      if (languageRef.current === 'html' && outputHistory.length > 0) {
         setIframeHtml(outputHistory[outputHistory.length - 1].output);
       }
     });
@@ -212,7 +225,7 @@ function Room() {
       
       // Update cursor position immediately without waiting for user list update
       setRemoteSelections(prev => {
-        const user = users.find(u => u.id === socketId);
+        const user = usersRef.current.find(u => u.id === socketId);
         return {
           ...prev,
           [socketId]: {
@@ -229,7 +242,7 @@ function Room() {
       
       // Update selection immediately without waiting for user list update
       setRemoteSelections(prev => {
-        const user = users.find(u => u.id === socketId);
+        const user = usersRef.current.find(u => u.id === socketId);
         return {
           ...prev,
           [socketId]: {
