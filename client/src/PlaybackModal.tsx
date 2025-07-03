@@ -23,7 +23,7 @@ const PlaybackModal: React.FC<Props> = ({ roomId, language, visible, onClose }) 
     if (!visible) return;
     axios.get<Snapshot[]>(`${API_URL}/api/rooms/${roomId}/history`).then(r => {
       setHistory(r.data);
-      setIdx(Math.max(0, r.data.length - 1));
+      setIdx(0);
     });
   }, [visible, roomId]);
 
