@@ -141,7 +141,7 @@ greeter.greet();`;
 
   addOutputToRoom(roomId, output, execTimeMs) {
     if (!this.roomState[roomId]) this.roomState[roomId] = { outputHistory: [] };
-    const timestamp = new Date().toLocaleString();
+    const timestamp = new Date().toISOString();
     if (!this.roomState[roomId].outputHistory) this.roomState[roomId].outputHistory = [];
     const entry = { timestamp, output };
     if (typeof execTimeMs === 'number') entry.execTimeMs = execTimeMs;

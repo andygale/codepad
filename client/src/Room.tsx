@@ -635,7 +635,15 @@ function Room() {
                   {outputBlocks.map((block, idx) => (
                     <div key={idx} style={{ marginBottom: 16 }}>
                       <div style={{ color: '#aaa', fontSize: 12, marginBottom: 4 }}>
-                        Run at {block.timestamp}{typeof block.execTimeMs === 'number' ? ` | Time: ${block.execTimeMs} ms` : ''}
+                        Run at {new Date(block.timestamp).toLocaleString(undefined, { 
+                          year: 'numeric', 
+                          month: 'numeric', 
+                          day: 'numeric', 
+                          hour: 'numeric', 
+                          minute: 'numeric', 
+                          second: 'numeric',
+                          timeZoneName: 'short'
+                        })}{typeof block.execTimeMs === 'number' ? ` | Time: ${block.execTimeMs} ms` : ''}
                       </div>
                       <pre style={{ margin: 0 }}>{block.output}</pre>
                     </div>
