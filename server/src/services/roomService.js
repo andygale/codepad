@@ -138,11 +138,13 @@ greeter.greet();`;
     this.roomState[roomId].code = code;
   }
 
-  addOutputToRoom(roomId, output) {
+  addOutputToRoom(roomId, output, execTimeMs) {
     if (!this.roomState[roomId]) this.roomState[roomId] = { outputHistory: [] };
     const timestamp = new Date().toLocaleString();
     if (!this.roomState[roomId].outputHistory) this.roomState[roomId].outputHistory = [];
-    this.roomState[roomId].outputHistory.push({ timestamp, output });
+    const entry = { timestamp, output };
+    if (typeof execTimeMs === 'number') entry.execTimeMs = execTimeMs;
+    this.roomState[roomId].outputHistory.push(entry);
     return this.roomState[roomId].outputHistory;
   }
 

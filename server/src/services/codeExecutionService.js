@@ -4,6 +4,7 @@ const config = require('../config');
 class CodeExecutionService {
   async executeCode(code, language) {
     try {
+      const start = Date.now();
       const response = await axios.post(config.pistonApiUrl, {
         language: language,
         version: config.languageVersions[language] || '*',
@@ -12,13 +13,14 @@ class CodeExecutionService {
           content: code 
         }]
       });
-      
+      const elapsed = Date.now() - start;
       const { run } = response.data;
       const output = (run.stdout || '') + (run.stderr || '');
 
       return { 
         success: true, 
-        output: output
+        output: output,
+        execTimeMs: elapsed
       };
     } catch (error) {
       console.error('Code execution error:', error.message);

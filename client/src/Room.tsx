@@ -41,7 +41,7 @@ type ClientEvents = {
   saveCode: (data: { room: string; code: string }) => void;
   languageUpdate: (data: { language: string; code?: string; room: string }) => void;
   joinRoom: (data: { roomId: string; user: { id: string, name: string } }) => void;
-  runOutput: (data: { output: string; room: string }) => void;
+  runOutput: (data: { output: string; room: string; execTimeMs?: number }) => void;
   clearOutput: (data: { room: string }) => void;
   cursorChange: (data: { room: string; position: any }) => void;
   selectionChange: (data: { room: string; selection: any }) => void;
@@ -55,7 +55,7 @@ function Room() {
   const [roomCreatedAt, setRoomCreatedAt] = useState('');
   const [language, setLanguage] = useState('deno');
   const [code, setCode] = useState(`class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`);
-  const [outputBlocks, setOutputBlocks] = useState<{ timestamp: string; output: string }[]>([]);
+  const [outputBlocks, setOutputBlocks] = useState<{ timestamp: string; output: string; execTimeMs?: number }[]>([]);
   const [users, setUsers] = useState<{id: string, name: string}[]>([]);
   const [name, setName] = useState('');
   const [namePrompt, setNamePrompt] = useState(true);
@@ -317,7 +317,7 @@ function Room() {
         language,
       });
       if (socketRef.current && roomId) {
-        socketRef.current.emit('runOutput', { output: res.data.output, room: roomId });
+        socketRef.current.emit('runOutput', { output: res.data.output, execTimeMs: res.data.execTimeMs, room: roomId });
       }
     } catch (err: any) {
       if (socketRef.current && roomId) {
@@ -602,7 +602,7 @@ function Room() {
                   {outputBlocks.map((block, idx) => (
                     <div key={idx} style={{ marginBottom: 16 }}>
                       <div style={{ color: '#aaa', fontSize: 12, marginBottom: 4 }}>
-                        Run at {block.timestamp}
+                        Run at {block.timestamp}{typeof block.execTimeMs === 'number' ? ` | Time: ${block.execTimeMs} ms` : ''}
                       </div>
                       <pre style={{ margin: 0 }}>{block.output}</pre>
                     </div>

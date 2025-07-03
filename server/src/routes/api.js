@@ -51,7 +51,7 @@ router.post('/execute', async (req, res) => {
   const result = await codeExecutionService.executeCode(code, language);
   
   if (result.success) {
-    res.json({ output: result.output });
+    res.json({ output: result.output, execTimeMs: result.execTimeMs });
   } else {
     res.status(500).json({
       error: result.error,

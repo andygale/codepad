@@ -116,8 +116,8 @@ const setupRoomHandlers = (io, socket) => {
     socket.to(room).emit('remoteSelectionChange', { selection, socketId: socket.id });
   });
 
-  socket.on('runOutput', ({ output, room }) => {
-    const outputHistory = roomService.addOutputToRoom(room, output);
+  socket.on('runOutput', ({ output, execTimeMs, room }) => {
+    const outputHistory = roomService.addOutputToRoom(room, output, execTimeMs);
     io.in(room).emit('outputHistory', { outputHistory });
   });
 
