@@ -1,4 +1,4 @@
-# Codepad - Collaborative Code Editor
+# CodeCrush - Collaborative Code Editor
 
 A real-time collaborative coding platform built with React, Node.js, Socket.IO, and Monaco Editor. Execute code in multiple languages using the Piston API.
 
@@ -138,7 +138,7 @@ Example:
 
 ### Project Structure
 ```
-codepad/
+codecrush/
 ├── client/          # React frontend
 │   ├── src/
 │   │   ├── App.tsx  # Main application

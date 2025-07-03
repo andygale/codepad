@@ -69,7 +69,7 @@ function Room() {
   const [visibleCursorLabels, setVisibleCursorLabels] = useState<Record<string, boolean>>({});
   const isRemoteUpdate = useRef(false);
   const isLocalLanguageUpdate = useRef(false);
-  const lastKnownContent = useRef(code);
+  
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const prevLanguage = useRef(language);
   const [copyMsg, setCopyMsg] = useState('');
@@ -98,58 +98,9 @@ function Room() {
       return userColors[index];
   }, []);
 
-  const commentSyntax: Record<string, (code: string) => string> = {
-    javascript: code => code.split('\n').map(line => '// ' + line).join('\n'),
-    typescript: code => code.split('\n').map(line => '// ' + line).join('\n'),
-    deno: code => code.split('\n').map(line => '// ' + line).join('\n'),
-    python3: code => code.split('\n').map(line => '# ' + line).join('\n'),
-    cpp: code => code.split('\n').map(line => '// ' + line).join('\n'),
-    java: code => code.split('\n').map(line => '// ' + line).join('\n'),
-  };
+  
 
-  // Function to calculate edit operations between two strings
-  const calculateEditOperations = useCallback((oldText: string, newText: string) => {
-    if (!editorRef.current || !monacoRef.current) return [];
-    
-    const model = editorRef.current.getModel();
-    if (!model) return [];
-
-    // Simple diff algorithm - find the range that changed
-    let start = 0;
-    let oldEnd = oldText.length;
-    let newEnd = newText.length;
-
-    // Find common prefix
-    while (start < oldEnd && start < newEnd && oldText[start] === newText[start]) {
-      start++;
-    }
-
-    // Find common suffix
-    while (oldEnd > start && newEnd > start && oldText[oldEnd - 1] === newText[newEnd - 1]) {
-      oldEnd--;
-      newEnd--;
-    }
-
-    if (start === oldEnd && start === newEnd) {
-      return []; // No changes
-    }
-
-    // Convert character positions to Monaco positions
-    const startPos = model.getPositionAt(start);
-    const endPos = model.getPositionAt(oldEnd);
-    
-    const operation = {
-      range: new monacoRef.current.Range(
-        startPos.lineNumber,
-        startPos.column,
-        endPos.lineNumber,
-        endPos.column
-      ),
-      text: newText.substring(start, newEnd)
-    };
-
-    return [operation];
-  }, []);
+  
 
   // Set name automatically for authenticated users
   useEffect(() => {
@@ -322,7 +273,7 @@ function Room() {
     }, 500);
 
     return () => clearInterval(interval);
-  }, []); 
+  }, [language, users]); 
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLang = e.target.value;

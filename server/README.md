@@ -1,6 +1,6 @@
-# Codepad Server
+# CodeCrush Server
 
-Backend server for the Codepad collaborative coding platform.
+Backend server for the CodeCrush collaborative coding platform.
 
 ## Architecture
 

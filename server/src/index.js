@@ -41,7 +41,7 @@ app.use(express.static(path.join(__dirname, '../../client/build')));
 // Development info endpoint
 app.get('/api/info', (req, res) => {
   res.json({ 
-    message: 'Codepad Server is running',
+    message: 'CodeCrush Server is running',
     version: '1.0.0',
     environment: config.nodeEnv,
     endpoints: {
@@ -60,7 +60,7 @@ app.get('*', (req, res) => {
 
 // Start server
 server.listen(config.port, '0.0.0.0', () => {
-  console.log(`🚀 Codepad Server listening on port ${config.port}`);
+  console.log(`🚀 CodeCrush Server listening on port ${config.port}`);
   console.log(`📁 Environment: ${config.nodeEnv}`);
   console.log(`🔧 Piston API: ${config.pistonApiUrl}`);
 }); 

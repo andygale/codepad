@@ -99,7 +99,7 @@ function LandingPage() {
       <header className="app-header">
         <div className="header-content">
           <div>
-            <h1>Welcome to Codepad</h1>
+            <h1>Welcome to CodeCrush</h1>
             <p>Real-time collaborative code editor.</p>
           </div>
           {isAuthenticated && (

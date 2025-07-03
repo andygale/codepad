@@ -27,7 +27,7 @@ This guide will help you deploy your own Piston instance on Render.com for secur
 1. **Create a new Web Service** on Render.com
 2. **Connect your repository**
 3. **Configure the service**:
-   - **Name**: `codepad-piston`
+   - **Name**: `codecrush-piston`
    - **Language**: `Docker`
    - **Dockerfile Path**: `./Dockerfile.piston`
    - **Plan**: `Starter` (or higher for production)
@@ -41,9 +41,9 @@ This guide will help you deploy your own Piston instance on Render.com for secur
 
 5. **Deploy**
 
-## Configure Your Codepad App
+## Configure Your CodeCrush App
 
-Once your Piston instance is deployed, update your main Codepad app:
+Once your Piston instance is deployed, update your main CodeCrush app:
 
 ### For Local Development
 Keep using local Piston:
@@ -53,9 +53,9 @@ yarn piston:start
 ```
 
 ### For Production (Render.com)
-Set the environment variable in your main Codepad service:
+Set the environment variable in your main CodeCrush service:
 
-1. Go to your main Codepad service on Render.com
+1. Go to your main CodeCrush service on Render.com
 2. Go to "Environment" tab
 3. Add environment variable:
    ```
