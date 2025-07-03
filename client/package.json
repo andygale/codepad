@@ -2,6 +2,7 @@
   "name": "codecrush-client",
   "version": "0.1.0",
   "private": true,
+  "license": "ISC",
   "dependencies": {
     "@google-cloud/local-auth": "^3.0.1",
     "@monaco-editor/react": "^4.7.0",
