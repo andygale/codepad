@@ -16,7 +16,7 @@ const languages = [
   { label: 'Java', value: 'java' },
   { label: 'JavaScript', value: 'javascript' },
   { label: 'Kotlin', value: 'kotlin' },
-  { label: 'Python', value: 'python3' },
+  { label: 'Python', value: 'python' },
   { label: 'Swift', value: 'swift' },
   { label: 'TypeScript', value: 'typescript' },
   { label: 'TypeScript Fast (Deno)', value: 'deno' },
@@ -80,7 +80,7 @@ function Room() {
     javascript: `class Greeter {\n  constructor(message) {\n    this.message = message;\n  }\n  greet() {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
     typescript: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
     deno: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
-    python3: `class Greeter:\n    def __init__(self, message):\n        self.message = message\n    def greet(self):\n        print(self.message)\n\ngreeter = Greeter('Hello, world!')\ngreeter.greet()`,
+    python: `class Greeter:\n    def __init__(self, message):\n        self.message = message\n    def greet(self):\n        print(self.message)\n\ngreeter = Greeter('Hello, world!')\ngreeter.greet()`,
     cpp: `#include <iostream>\n\nclass Greeter {\npublic:\n    Greeter(const std::string& message) : message_(message) {}\n    void greet() const { std::cout << message_ << std::endl; }\nprivate:\n    std::string message_;\n};\n\nint main() {\n    Greeter greeter("Hello, world!");\n    greeter.greet();\n    return 0;\n}`,
     java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter("Hello, world!");\n        greeter.greet();\n    }\n}`,
     html: `<!DOCTYPE html>\n<html>\n<head>\n  <title>Web Example</title>\n  <style>\n    body { font-family: sans-serif; background: #f9f9f9; color: #222; }\n    .greeting { color: #007acc; font-size: 2em; margin-top: 2em; }\n  </style>\n</head>\n<body>\n  <div class="greeting">Hello, world!</div>\n  <script>\n    document.querySelector('.greeting').textContent += ' (from JavaScript!)';\n  </script>\n</body>\n</html>`,
@@ -577,7 +577,7 @@ function Room() {
               </div>
               <MonacoEditor
                 height="100%"
-                language={language === 'python3' ? 'python' : language === 'deno' ? 'typescript' : language}
+                language={language === 'deno' ? 'typescript' : language}
                 theme="vs-dark"
                 value={code}
                 onMount={handleEditorDidMount}

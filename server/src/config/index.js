@@ -10,7 +10,7 @@ const config = {
   // Language configurations
   languageVersions: {
     javascript: '20.11.1',
-    python3: '3.12.0',
+    python: '3.10.0',
     cpp: '10.2.0',
     java: '15.0.2',
     typescript: '5.0.3',
@@ -21,7 +21,7 @@ const config = {
 
   fileNames: {
     javascript: 'main.js',
-    python3: 'main.py',
+    python: 'main.py',
     cpp: 'main.cpp',
     java: 'Main.java',
     typescript: 'main.ts',
