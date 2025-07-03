@@ -18,6 +18,7 @@ class RoomService {
   }
   greet(): void {
     console.log(this.message);
+    console.log('Running Deno version:', Deno.version.deno);
   }
 }
 
@@ -94,7 +95,7 @@ greeter.greet();`;
     // Fallback to in-memory creation (shouldn't happen with persistent rooms)
     if (!this.roomState[roomId]) {
       this.roomState[roomId] = {
-        code: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
+        code: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n    console.log('Running Deno version:', Deno.version.deno);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
         language: 'deno',
         outputHistory: []
       };

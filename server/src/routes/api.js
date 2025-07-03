@@ -53,10 +53,14 @@ router.post('/execute', async (req, res) => {
   if (result.success) {
     res.json({ output: result.output, execTimeMs: result.execTimeMs });
   } else {
-    res.status(500).json({
+    // Use the status code from Piston if available, otherwise default to 500
+    const statusCode = result.statusCode || 500;
+    
+    res.status(statusCode).json({
       error: result.error,
-      details: result.details,
-      piston: result.pistonError
+      statusCode: result.statusCode,
+      pistonResponse: result.pistonResponse,
+      originalError: result.originalError
     });
   }
 });

@@ -90,15 +90,15 @@ function Room() {
   }, [users]);
 
   const languageExamples: Record<string, string> = {
-    javascript: `class Greeter {\n  constructor(message) {\n    this.message = message;\n  }\n  greet() {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
-    typescript: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
-    deno: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
-    python: `class Greeter:\n    def __init__(self, message):\n        self.message = message\n    def greet(self):\n        print(self.message)\n\ngreeter = Greeter('Hello, world!')\ngreeter.greet()`,
-    cpp: `#include <iostream>\n\nclass Greeter {\npublic:\n    Greeter(const std::string& message) : message_(message) {}\n    void greet() const { std::cout << message_ << std::endl; }\nprivate:\n    std::string message_;\n};\n\nint main() {\n    Greeter greeter("Hello, world!");\n    greeter.greet();\n    return 0;\n}`,
-    java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter("Hello, world!");\n        greeter.greet();\n    }\n}`,
+    javascript: `console.log('Hello, world!');\nconsole.log('Running Node.js version:', process.version);`,
+    typescript: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n    // TypeScript compiles to JavaScript and runs on Node.js\n    console.log('Running Node.js version:', (globalThis as any).process?.version || 'unknown');\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
+    deno: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n    console.log('Running Deno version:', Deno.version.deno);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
+    python: `import sys\n\nclass Greeter:\n    def __init__(self, message):\n        self.message = message\n    def greet(self):\n        print(self.message)\n        print(f'Running Python {sys.version}')\n\ngreeter = Greeter('Hello, world!')\ngreeter.greet()`,
+    cpp: `#include <iostream>\n\nint main() {\n    std::cout << "Hello, world!" << std::endl;\n    std::cout << "Running C++ with GCC " << __GNUC__ << "." << __GNUC_MINOR__ << "." << __GNUC_PATCHLEVEL__ << std::endl;\n    return 0;\n}`,
+    java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n        System.out.println("Running Java version: " + System.getProperty("java.version"));\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter("Hello, world!");\n        greeter.greet();\n    }\n}`,
     html: `<!DOCTYPE html>\n<html>\n<head>\n  <title>Web Example</title>\n  <style>\n    body { font-family: sans-serif; background: #f9f9f9; color: #222; }\n    .greeting { color: #007acc; font-size: 2em; margin-top: 2em; }\n  </style>\n</head>\n<body>\n  <div class="greeting">Hello, world!</div>\n  <script>\n    document.querySelector('.greeting').textContent += ' (from JavaScript!)';\n  </script>\n</body>\n</html>`,
-    swift: `func greet(name: String) {\n    print("Hello, \\(name)!")\n}\n\ngreet(name: "world")`,
-    kotlin: `fun main() {\n    println("Hello, world!")\n}`
+    swift: `func greet(name: String) {\n    print("Hello, \\(name)!")\n    \n    #if swift(>=5.3)\n    print("Running Swift 5.3 or later")\n    #elseif swift(>=5.0)\n    print("Running Swift 5.0-5.2")\n    #else\n    print("Running Swift < 5.0")\n    #endif\n}\n\ngreet(name: "world")`,
+    kotlin: `fun main() {\n    println("Hello, world!")\n    println("Running Kotlin \${kotlin.KotlinVersion.CURRENT}")\n}`
   };
 
   const getUserColor = useCallback((userId: string) => {
@@ -334,7 +334,27 @@ function Room() {
       }
     } catch (err: any) {
       if (socketRef.current && roomId) {
-        socketRef.current.emit('runOutput', { output: 'Error running code: ' + (err.response?.data?.error || err.message), room: roomId });
+        // Extract detailed error information
+        let errorOutput = 'Code execution error:\n';
+        
+        if (err.response?.data) {
+          const errorData = err.response.data;
+          errorOutput += errorData.error || 'Unknown error';
+          
+          // Add additional details if available
+          if (errorData.pistonResponse) {
+            errorOutput += '\n\nPiston API Response:';
+            errorOutput += '\n' + JSON.stringify(errorData.pistonResponse, null, 2);
+          }
+          
+          if (errorData.originalError && errorData.originalError !== errorData.error) {
+            errorOutput += '\n\nOriginal Error: ' + errorData.originalError;
+          }
+        } else {
+          errorOutput += err.message || 'Unknown error occurred';
+        }
+        
+        socketRef.current.emit('runOutput', { output: errorOutput, room: roomId });
       }
     } finally {
       setIsRunning(false);

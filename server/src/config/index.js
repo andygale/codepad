@@ -9,7 +9,7 @@ const config = {
   
   // Language configurations
   languageVersions: {
-    javascript: '20.11.1',
+    javascript: '18.15.0',
     python: '3.10.0',
     cpp: '10.2.0',
     java: '15.0.2',
