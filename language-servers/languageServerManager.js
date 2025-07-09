@@ -26,6 +26,43 @@ class LanguageServerManager {
       }
     };
     this.workspaceDir = path.join(__dirname, 'workspace');
+
+    // Ensure workspace directory exists and set up periodic cleanup of stale session dirs
+    if (!fs.existsSync(this.workspaceDir)) {
+      fs.mkdirSync(this.workspaceDir, { recursive: true });
+    }
+
+    // Clean up once on startup and then every 6 hours
+    this.cleanupOldSessionDirs();
+    setInterval(() => this.cleanupOldSessionDirs(), 6 * 60 * 60 * 1000);
+  }
+
+  /**
+   * Removes session workspace sub-directories older than MAX_AGE_MS (default 24 h)
+   */
+  cleanupOldSessionDirs(maxAgeMs = 24 * 60 * 60 * 1000) {
+    try {
+      const now = Date.now();
+      const entries = fs.readdirSync(this.workspaceDir, { withFileTypes: true });
+      entries.forEach(entry => {
+        if (!entry.isDirectory()) return;
+        const fullPath = path.join(this.workspaceDir, entry.name);
+        // Skip dot folders or metadata directories that are part of LS itself
+        if (entry.name.startsWith('.')) return;
+
+        try {
+          const stats = fs.statSync(fullPath);
+          if (now - stats.mtimeMs > maxAgeMs) {
+            fs.rmSync(fullPath, { recursive: true, force: true });
+            console.log(`[LS Manager] Removed stale workspace directory: ${fullPath}`);
+          }
+        } catch (err) {
+          console.error('[LS Manager] Error checking/removing workspace dir', fullPath, err);
+        }
+      });
+    } catch (err) {
+      console.error('[LS Manager] Failed to clean old session workspaces', err);
+    }
   }
 
   getWorkspaceDir() {
