@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  codecrush:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://codecrush:codecrush@db:5432/codecrush
+      - PISTON_API_URL=http://piston:2000
+    depends_on:
+      - db
+      - piston
+    restart: unless-stopped
+    volumes:
+      - language-servers:/app/language-servers
+    networks:
+      - codecrush-network
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=codecrush
+      - POSTGRES_USER=codecrush
+      - POSTGRES_PASSWORD=codecrush
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - codecrush-network
+
+  piston:
+    image: ghcr.io/engineer-man/piston:latest
+    ports:
+      - "2000:2000"
+    restart: unless-stopped
+    networks:
+      - codecrush-network
+
+volumes:
+  postgres-data:
+  language-servers:
+
+networks:
+  codecrush-network:
+    driver: bridge

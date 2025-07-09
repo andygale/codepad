@@ -7,6 +7,7 @@ import { useAuth } from './AuthContext';
 import './App.css'; // Reusing styles for now
 import PlaybackModal from './PlaybackModal';
 import Split from 'react-split';
+import { LSPClient } from './services/lspClient';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
 
@@ -69,6 +70,10 @@ function Room() {
   const [visibleCursorLabels, setVisibleCursorLabels] = useState<Record<string, boolean>>({});
   const isRemoteUpdate = useRef(false);
   const isLocalLanguageUpdate = useRef(false);
+  const [lspStatus, setLspStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+
+  const lspClientRef = useRef<LSPClient | null>(null);
+  const [editorReady, setEditorReady] = useState(false);
   
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const prevLanguage = useRef(language);
@@ -288,6 +293,93 @@ function Room() {
     return () => clearInterval(interval);
   }, [language, users]); 
 
+  const initializeLSP = useCallback(() => {
+        if (!editorRef.current || !socketRef.current || !roomId || !editorReady) {
+            console.log(`[Room] Missing requirements - editor: ${!!editorRef.current}, socket: ${!!socketRef.current}, roomId: ${roomId}, editorReady: ${editorReady}`);
+            return;
+        }
+
+        const supportedLanguages = ['kotlin', 'java'];
+        if (!supportedLanguages.includes(language)) {
+            console.log(`[Room] Language ${language} not supported for LSP.`);
+            if (lspClientRef.current) {
+                lspClientRef.current.disconnect();
+                lspClientRef.current = null;
+            }
+            return;
+        }
+
+        console.log(`[Room] Starting LSP initialization for ${language}`);
+
+        // Disconnect previous client if it exists
+        if (lspClientRef.current) {
+            lspClientRef.current.disconnect();
+        }
+
+        // Create new LSP client
+        console.log(`[Room] Creating new LSP client for ${language}`);
+        lspClientRef.current = new LSPClient(
+            socketRef.current,
+            editorRef.current,
+            language,
+            roomId,
+            () => {
+              console.log('[Room] LSP Connected');
+              setLspStatus('connected');
+            },
+            () => {
+              console.log('[Room] LSP Disconnected');
+              setLspStatus('disconnected');
+            },
+            monacoRef.current
+        );
+
+        // Connect to LSP server with retry logic
+        const connectWithRetry = async (retries: number) => {
+            try {
+                setLspStatus('connecting');
+                await lspClientRef.current?.connect();
+            } catch (error) {
+                console.error(`[Room] LSP connection failed:`, error);
+                if (retries > 0) {
+                    console.log(`[Room] Retrying LSP connection... (${retries} retries left)`);
+                    setTimeout(() => connectWithRetry(retries - 1), 5000);
+                } else {
+                    console.error('[Room] LSP connection failed after multiple retries.');
+                    setLspStatus('error');
+                }
+            }
+        };
+
+        connectWithRetry(3);
+
+    }, [language, roomId, editorReady]);
+
+  useEffect(() => {
+    console.log(`[Room] useEffect triggered for LSP initialization - language: ${language}, roomId: ${roomId}, editor: ${!!editorRef.current}, socket: ${!!socketRef.current}`);
+    
+    initializeLSP();
+
+    return () => {
+      if (lspClientRef.current) {
+        lspClientRef.current.disconnect();
+        lspClientRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initializeLSP]);
+
+  // Ensure Monaco model language matches the current language
+  useEffect(() => {
+    if (editorRef.current && monacoRef.current) {
+      try {
+        monacoRef.current.editor.setModelLanguage(editorRef.current.getModel(), language);
+      } catch (err) {
+        console.error('Failed to set Monaco model language:', err);
+      }
+    }
+  }, [language]);
+
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLang = e.target.value;
     
@@ -368,9 +460,11 @@ function Room() {
   };
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
+    console.log('[Room] Editor mounted successfully');
     editorRef.current = editor;
     monacoRef.current = monaco;
     decorationsCollectionRef.current = editor.createDecorationsCollection();
+    setEditorReady(true);
 
     // Main content change handler
     editor.onDidChangeModelContent((event: any) => {
@@ -568,15 +662,34 @@ function Room() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <select
-              value={language}
-              onChange={handleLanguageChange}
-              style={{ fontSize: 16, padding: 4 }}
-            >
-              {languages.map(lang => (
-                <option key={lang.value} value={lang.value}>{lang.label}</option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <select
+                value={language}
+                onChange={handleLanguageChange}
+                style={{ fontSize: 16, padding: 4 }}
+              >
+                {languages.map(lang => (
+                  <option key={lang.value} value={lang.value}>{lang.label}</option>
+                ))}
+              </select>
+              {(['kotlin', 'java'].includes(language)) && (
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  fontSize: '12px',
+                  color: lspStatus === 'connected' ? '#4CAF50' : (lspStatus === 'connecting' ? '#FF9800' : '#FF5722')
+                }}>
+                  <div style={{ 
+                    width: '8px', 
+                    height: '8px', 
+                    borderRadius: '50%', 
+                    backgroundColor: lspStatus === 'connected' ? '#4CAF50' : (lspStatus === 'connecting' ? '#FF9800' : '#FF5722')
+                  }} />
+                  IntelliSense {lspStatus === 'connected' ? 'On' : (lspStatus === 'connecting' ? 'Loading...' : 'Failed')}
+                </div>
+              )}
+            </div>
             <button 
               onClick={handleRun} 
               disabled={isRunning} 
