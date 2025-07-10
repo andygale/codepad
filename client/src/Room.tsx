@@ -68,6 +68,8 @@ function Room() {
   const [remoteSelections, setRemoteSelections] = useState<Record<string, { selection: any, name: string }>>({});
   const remoteCursorActivity = useRef<Record<string, number>>({});
   const [visibleCursorLabels, setVisibleCursorLabels] = useState<Record<string, boolean>>({});
+  // Control whether execution output should wrap long lines
+  const [wrapOutput, setWrapOutput] = useState(true);
   const isRemoteUpdate = useRef(false);
   const isLocalLanguageUpdate = useRef(false);
   const [lspStatus, setLspStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
@@ -731,8 +733,17 @@ function Room() {
               />
             </div>
             <div className="output-container">
-              <div className="output-header">
-                <h2>Output</h2>
+              <div className="output-header" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <h2 style={{ margin: 0 }}>Output</h2>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.9em' }}>
+                  <input
+                    type="checkbox"
+                    checked={wrapOutput}
+                    onChange={(e) => setWrapOutput(e.target.checked)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  Wrap lines
+                </label>
                 <button onClick={handleClearOutput} className="clear-button">
                   Clear
                 </button>
@@ -758,7 +769,7 @@ function Room() {
                           timeZoneName: 'short'
                         })}{typeof block.execTimeMs === 'number' ? ` | Time: ${block.execTimeMs} ms` : ''}
                       </div>
-                      <pre style={{ margin: 0 }}>{block.output}</pre>
+                      <pre style={{ margin: 0, whiteSpace: wrapOutput ? 'pre-wrap' : 'pre', overflowX: wrapOutput ? 'auto' : 'scroll' }}>{block.output}</pre>
                     </div>
                   ))}
                 </div>

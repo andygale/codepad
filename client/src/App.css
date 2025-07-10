@@ -102,6 +102,36 @@
   text-align: left;
 }
 
+/* Custom scrollbar for output box */
+.output-box::-webkit-scrollbar,
+.output-box pre::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.output-box::-webkit-scrollbar-track,
+.output-box pre::-webkit-scrollbar-track {
+  background: #181818;
+}
+
+.output-box::-webkit-scrollbar-thumb,
+.output-box pre::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.output-box::-webkit-scrollbar-thumb:hover,
+.output-box pre::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+
+/* Firefox */
+.output-box,
+.output-box pre {
+  scrollbar-color: #555 #181818;
+  scrollbar-width: thin;
+}
+
 .editor-container {
   flex: 2 1 0;
   display: flex;
