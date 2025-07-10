@@ -23,7 +23,7 @@ class LanguageServerService {
       }
 
       // Check if language is supported
-      const supportedLanguages = ['kotlin', 'java'];
+      const supportedLanguages = ['kotlin', 'java', 'python'];
       if (!supportedLanguages.includes(language)) {
         console.error(`[${new Date().toISOString()}] [LSP] Unsupported language: ${language}. Supported languages: ${supportedLanguages.join(', ')}`);
         socket.emit('lsp-error', { error: `Unsupported language: ${language}. Supported languages: ${supportedLanguages.join(', ')}` });
@@ -115,8 +115,8 @@ class LanguageServerService {
   getStatus() {
     return {
       connectedClients: this.clientConnections.size,
-      activeLanguageServers: this.languageServerManager.servers.size,
-      supportedLanguages: ['kotlin', 'java']
+      activeLanguageServers: this.lspProxy.languageServerManager.servers.size,
+      supportedLanguages: ['kotlin', 'java', 'python']
     };
   }
 }

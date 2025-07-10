@@ -299,7 +299,7 @@ function Room() {
             return;
         }
 
-        const supportedLanguages = ['kotlin', 'java'];
+        const supportedLanguages = ['kotlin', 'java', 'python'];
         if (!supportedLanguages.includes(language)) {
             console.log(`[Room] Language ${language} not supported for LSP.`);
             if (lspClientRef.current) {
@@ -672,7 +672,7 @@ function Room() {
                   <option key={lang.value} value={lang.value}>{lang.label}</option>
                 ))}
               </select>
-              {(['kotlin', 'java'].includes(language)) && (
+              {(['kotlin', 'java', 'python'].includes(language)) && (
                 <div style={{ 
                   display: 'flex', 
                   alignItems: 'center', 

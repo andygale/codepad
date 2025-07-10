@@ -18,3 +18,10 @@
 
 # logs
 npm-debug.log package-lock.json
+
+# Eclipse JDT Language Server runtime caches
+language-servers/jdt-language-server/config_*/org.eclipse.*/*/ .manager/
+language-servers/jdt-language-server/config_*/org.eclipse.*/*.manager/
+language-servers/jdt-language-server/config_*/org.eclipse.*/.manager/
+language-servers/jdt-language-server/config_*/org.eclipse.*/framework.info.*
+language-servers/jdt-language-server/config_*/org.eclipse.*/.fileTable.*

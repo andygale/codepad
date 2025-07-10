@@ -23,6 +23,18 @@ class LanguageServerManager {
         executable: process.env.NODE_ENV === 'production' ? 'java' : '/opt/homebrew/opt/openjdk@21/bin/java',
         serverDir: path.join(__dirname, 'jdt-language-server'),
         extension: 'java'
+      },
+      python: {
+        name: 'Pyright Language Server',
+        command: process.platform === 'win32'
+          ? path.join(__dirname, '..', 'server', 'node_modules', '.bin', 'pyright-langserver.cmd')
+          : path.join(__dirname, '..', 'server', 'node_modules', '.bin', 'pyright-langserver'),
+        args: ['--stdio'],
+        executable: process.platform === 'win32'
+          ? path.join(__dirname, '..', 'server', 'node_modules', '.bin', 'pyright-langserver.cmd')
+          : path.join(__dirname, '..', 'server', 'node_modules', '.bin', 'pyright-langserver'),
+        serverDir: path.join(__dirname, '..', 'server'),
+        extension: 'py'
       }
     };
     this.workspaceDir = path.join(__dirname, 'workspace');
@@ -34,7 +46,9 @@ class LanguageServerManager {
 
     // Clean up once on startup and then every 6 hours
     this.cleanupOldSessionDirs();
-    setInterval(() => this.cleanupOldSessionDirs(), 6 * 60 * 60 * 1000);
+    const interval = setInterval(() => this.cleanupOldSessionDirs(), 6 * 60 * 60 * 1000);
+    // Allow Node process to exit naturally when this is the only active timer (e.g., during install.js)
+    interval.unref();
   }
 
   /**
@@ -107,7 +121,7 @@ class LanguageServerManager {
       ];
     }
     
-    return [];
+    return config?.args || [];
   }
 
   async startLanguageServer(language) {
@@ -212,6 +226,8 @@ class LanguageServerManager {
       return fs.existsSync(config.serverDir);
     } else if (language === 'kotlin') {
       return fs.existsSync(config.executable);
+    } else if (language === 'python') {
+      return fs.existsSync(config.command);
     }
     return false;
   }

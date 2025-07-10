@@ -302,8 +302,14 @@ class LSPProxy {
     };
 
     try {
+      // Send initialize request and wait for response
       await this.sendRequest(clientId, 'initialize', initializeParams);
+
+      // Per LSP spec, the client MUST send an 'initialized' notification once it receives the response
       await this.sendNotification(clientId, 'initialized', {});
+
+      // Optionally inform server about (empty) workspace configuration so it doesn’t wait for it
+      await this.sendNotification(clientId, 'workspace/didChangeConfiguration', { settings: {} });
     } catch (error) {
       console.error(`[${new Date().toISOString()}] [LSP Proxy] Error initializing language server for client ${clientId}:`, error);
       // Optionally, emit an error to the client
@@ -512,6 +518,31 @@ class LSPProxy {
   handleLanguageServerMessage(clientId, message) {
     const connection = this.clientConnections.get(clientId);
     if (!connection) return;
+
+    // Handle server -> client requests that require immediate simple responses
+    if (message.id && message.method === 'workspace/configuration') {
+      // Respond with an empty configuration array so the server can proceed
+      const response = {
+        jsonrpc: '2.0',
+        id: message.id,
+        result: []
+      };
+      const str = JSON.stringify(response);
+      connection.languageServer.stdin.write(`Content-Length: ${str.length}\r\n\r\n${str}`);
+      return; // Do not forward this message to browser
+    }
+
+    if (message.id && message.method === 'client/registerCapability') {
+      // Acknowledge capability registration with null result
+      const response = {
+        jsonrpc: '2.0',
+        id: message.id,
+        result: null
+      };
+      const str = JSON.stringify(response);
+      connection.languageServer.stdin.write(`Content-Length: ${str.length}\r\n\r\n${str}`);
+      return;
+    }
 
     if (message.id && this.messageHandlers.has(message.id)) {
       // Response to a request originated by the proxy (e.g., initialize)

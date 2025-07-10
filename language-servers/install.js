@@ -28,6 +28,7 @@ async function installLanguageServers() {
       console.log('✅ Java Language Server already installed');
     }
     
+    // Python LS (Pyright) is provided via NPM dependency, so no additional download needed.
     console.log('🎉 All language servers installed successfully!');
     console.log('');
     console.log('Available IntelliSense features:');
@@ -36,7 +37,7 @@ async function installLanguageServers() {
     console.log('  • Hover information');
     console.log('  • Real-time diagnostics');
     console.log('');
-    console.log('Supported languages: Kotlin, Java');
+    console.log('Supported languages: Kotlin, Java, Python');
     
   } catch (error) {
     console.error('❌ Error installing language servers:', error);
@@ -46,7 +47,7 @@ async function installLanguageServers() {
 
 // Run if called directly
 if (require.main === module) {
-  installLanguageServers();
+  installLanguageServers().then(() => process.exit(0));
 }
 
 module.exports = installLanguageServers;

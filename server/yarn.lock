@@ -513,9 +513,9 @@ fs-minipass@^2.0.0:
   dependencies:
     minipass "^3.0.0"
 
-fsevents@~2.3.2:
+fsevents@~2.3.2, fsevents@~2.3.3:
   version "2.3.3"
-  resolved "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz"
+  resolved "https://registry.yarnpkg.com/fsevents/-/fsevents-2.3.3.tgz#cac6407785d03675a2a5e1a5305c697b347d90d6"
   integrity sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==
 
 function-bind@^1.1.2:
@@ -949,6 +949,13 @@ pstree.remy@^1.1.8:
   version "1.1.8"
   resolved "https://registry.npmjs.org/pstree.remy/-/pstree.remy-1.1.8.tgz"
   integrity sha512-77DZwxQmxKnu3aR542U+X8FypNzbfJ+C5XQDk3uWjWxn6151aIMGthWYRXTqT1E5oJvg+ljaa2OJi+VfvCOQ8w==
+
+pyright@^1.1.361:
+  version "1.1.403"
+  resolved "https://registry.yarnpkg.com/pyright/-/pyright-1.1.403.tgz#1fa72f7d9e791874169c9b5a377f67a288ecb8b1"
+  integrity sha512-OyslngwxftKgNfbiyR8WDadUoLHDoinwUfbd50P1VBfLWkR5cro9R52qMQMpVI/LiSVpWbzunToR2NX7SanwmA==
+  optionalDependencies:
+    fsevents "~2.3.3"
 
 qs@6.13.0:
   version "6.13.0"
