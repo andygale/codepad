@@ -1,27 +1,29 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
+# Dependencies
 /node_modules
 /client/node_modules
 /server/node_modules
 
-# misc
+# Build Artifacts
+/client/build
+/server/dist
+
+# Language Servers
+# Ignore the downloaded server binaries and any generated workspace files
+/language-servers/jdt-language-server
+/language-servers/kotlin-language-server
+/language-servers/workspace
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# IDE & OS Files
 .DS_Store
-
-# environment variables
-/server/.env
-/.env
-
-# build outputs
-/client/build/
-/client/dist/
-
-# logs
-npm-debug.log package-lock.json
-
-# Eclipse JDT Language Server runtime caches
-language-servers/jdt-language-server/config_*/org.eclipse.*/*/ .manager/
-language-servers/jdt-language-server/config_*/org.eclipse.*/*.manager/
-language-servers/jdt-language-server/config_*/org.eclipse.*/.manager/
-language-servers/jdt-language-server/config_*/org.eclipse.*/framework.info.*
-language-servers/jdt-language-server/config_*/org.eclipse.*/.fileTable.*
+.idea/
+.vscode/
