@@ -4,9 +4,12 @@ const config = require('../config');
 class DbService {
   constructor() {
     if (!DbService.instance) {
+      // In production, SSL is required unless explicitly disabled.
+      const useSsl = config.nodeEnv === 'production' && process.env.DATABASE_SSL !== 'false';
+
       this.pool = new Pool({
         connectionString: config.databaseUrl,
-        ssl: config.nodeEnv === 'production' ? { rejectUnauthorized: false } : false
+        ssl: useSsl ? { rejectUnauthorized: false } : false
       });
 
       this.pool.on('error', (err, client) => {

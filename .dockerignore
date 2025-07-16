@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+node_modules
+client/node_modules
+server/node_modules
+
+# Build Artifacts
+client/build
+server/dist
+
+# Language Server binaries (will be re-downloaded during build)
+language-servers/jdt-language-server/
+language-servers/kotlin-language-server/
+language-servers/workspace/
+language-servers/server.jar
+
+# But include the manager scripts
+!language-servers/*.js
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Environment
+.env
+.env.local
+
+# IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Test
+coverage/
+
+# Runtime
+tmp/
+temp/ 

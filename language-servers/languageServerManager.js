@@ -37,7 +37,7 @@ class LanguageServerManager {
         extension: 'py'
       }
     };
-    this.workspaceDir = path.join(__dirname, 'workspace');
+    this.workspaceDir = '/tmp/lsp-workspace';
 
     // Ensure workspace directory exists and set up periodic cleanup of stale session dirs
     if (!fs.existsSync(this.workspaceDir)) {
@@ -102,8 +102,36 @@ class LanguageServerManager {
       }
       
       const launcherPath = path.join(pluginsDir, launcherFiles[0]);
-      const platform = process.platform === 'darwin' ? 'config_mac' : 
-                     process.platform === 'win32' ? 'config_win' : 'config_linux';
+      // Choose correct SWT configuration dir.
+      let platform;
+      if (process.platform === 'darwin') {
+        platform = 'config_mac';
+      } else if (process.platform === 'win32') {
+        platform = 'config_win';
+      } else {
+        // Linux – distinguish architecture
+        platform = process.arch === 'arm64' ? 'config_linux_arm' : 'config_linux';
+      }
+      
+      // Use writable configuration directory
+      let configPath = path.join(__dirname, 'jdt-language-server', platform);
+      
+      // Check if configuration directory is writable, if not use /tmp
+      try {
+        fs.accessSync(configPath, fs.constants.W_OK);
+      } catch (error) {
+        // Config directory is not writable, use /tmp copy
+        const writableConfigPath = path.join('/tmp', platform);
+        if (!fs.existsSync(writableConfigPath)) {
+          // Copy config to writable location
+          const { execSync } = require('child_process');
+          execSync(`cp -r "${configPath}" "${writableConfigPath}"`);
+        }
+        configPath = writableConfigPath;
+      }
+      
+      // Use writable workspace directory
+      const workspacePath = '/tmp/jdt-workspace';
       
       return [
         '-Declipse.application=org.eclipse.jdt.ls.core.id1',
@@ -115,9 +143,9 @@ class LanguageServerManager {
         '-jar',
         launcherPath,
         '-configuration',
-        path.join(__dirname, 'jdt-language-server', platform),
+        configPath,
         '-data',
-        path.join(__dirname, 'workspace')
+        workspacePath
       ];
     }
     
@@ -125,7 +153,7 @@ class LanguageServerManager {
   }
 
   async startLanguageServer(language) {
-    console.log(`[LS Manager] Starting language server for ${language}`);
+    console.log(`[LS Manager] Starting language server for ${language} (host arch=${process.arch}, platform=${process.platform})`);
     
     if (this.servers.has(language)) {
       console.log(`[LS Manager] Language server for ${language} already running`);
@@ -148,7 +176,7 @@ class LanguageServerManager {
     
     // Ensure workspace directory exists for Java
     if (language === 'java') {
-      const workspaceDir = path.join(__dirname, 'workspace');
+      const workspaceDir = '/tmp/jdt-workspace';
       if (!fs.existsSync(workspaceDir)) {
         fs.mkdirSync(workspaceDir, { recursive: true });
         console.log(`[LS Manager] Created workspace directory: ${workspaceDir}`);
@@ -167,6 +195,13 @@ class LanguageServerManager {
       const server = spawn(config.command, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: cwd
+      });
+
+      server.stdout.on('data', (data) => {
+        console.log(`[${language.toUpperCase()} LS][stdout] ${data.toString().trim()}`);
+      });
+      server.stderr.on('data', (data) => {
+        console.error(`[${language.toUpperCase()} LS][stderr] ${data.toString().trim()}`);
       });
 
       const serverInfo = {
@@ -190,9 +225,13 @@ class LanguageServerManager {
         this.servers.delete(language);
       });
 
-      // Add a small delay to ensure the server is ready
+      // Wait briefly; if the process has already exited, treat as failure.
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
+      if (server.exitCode !== null) {
+        throw new Error(`${config.name} exited immediately with code ${server.exitCode}`);
+      }
+
       console.log(`[LS Manager] ${config.name} started successfully with PID: ${server.pid}`);
       return serverInfo;
     } catch (error) {
@@ -332,7 +371,7 @@ class LanguageServerManager {
           fs.unlinkSync(tarPath);
           
           // Create workspace directory
-          const workspaceDir = path.join(__dirname, 'workspace');
+          const workspaceDir = '/tmp/jdt-workspace';
           if (!fs.existsSync(workspaceDir)) {
             fs.mkdirSync(workspaceDir, { recursive: true });
           }

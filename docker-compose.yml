@@ -1,7 +1,6 @@
-version: '3.8'
-
 services:
   codecrush:
+    platform: linux/arm64
     build: .
     ports:
       - "3001:3001"
@@ -9,10 +8,10 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - DATABASE_URL=postgresql://codecrush:codecrush@db:5432/codecrush
-      - PISTON_API_URL=http://piston:2000
+      - DATABASE_SSL=false
     depends_on:
-      - db
-      - piston
+      db:
+        condition: service_healthy
     restart: unless-stopped
     volumes:
       - language-servers:/app/language-servers
@@ -29,17 +28,24 @@ services:
       - postgres-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codecrush"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
     networks:
       - codecrush-network
 
-  piston:
-    image: ghcr.io/engineer-man/piston:latest
-    ports:
-      - "2000:2000"
-    restart: unless-stopped
-    networks:
-      - codecrush-network
+  # piston:
+  #   image: ghcr.io/engineer-man/piston:latest
+  #   platform: linux/amd64
+  #   privileged: true
+  #   ports:
+  #     - "2000:2000"
+  #   restart: unless-stopped
+  #   networks:
+  #     - codecrush-network
 
 volumes:
   postgres-data:
