@@ -166,6 +166,12 @@ function Room() {
       console.log('Connected to backend Socket.IO server');
       // Re-join room with new socket ID on reconnection
       socket.emit('joinRoom', { roomId, user: { id: socket.id, name } });
+      
+      // If we had an LSP connection before, reinitialize it after reconnection
+      if (lspClientRef.current && editorReady) {
+        console.log('[Room] Socket reconnected, reinitializing LSP');
+        initializeLSP();
+      }
     });
 
     socket.on('room_error', ({ message }) => {
@@ -313,6 +319,15 @@ function Room() {
             return;
         }
 
+        // Ensure Monaco model language matches before initializing LSP
+        if (monacoRef.current && editorRef.current) {
+            try {
+                monacoRef.current.editor.setModelLanguage(editorRef.current.getModel(), language);
+            } catch (err) {
+                console.error('Failed to set Monaco model language:', err);
+            }
+        }
+
         console.log(`[Room] Starting LSP initialization for ${language}`);
 
         // Disconnect previous client if it exists
@@ -360,9 +375,17 @@ function Room() {
     }, [language, roomId, editorReady]);
 
   useEffect(() => {
-    console.log(`[Room] useEffect triggered for LSP initialization - language: ${language}, roomId: ${roomId}, editor: ${!!editorRef.current}, socket: ${!!socketRef.current}`);
+    console.log(`[Room] useEffect triggered for LSP initialization - language: ${language}, roomId: ${roomId}, editor: ${!!editorRef.current}, socket: ${!!socketRef.current}, editorReady: ${editorReady}`);
     
-    initializeLSP();
+    // Only initialize if all requirements are met
+    if (editorRef.current && socketRef.current && roomId && editorReady) {
+      // Add a small delay to ensure all state updates have propagated
+      const timer = setTimeout(() => {
+        initializeLSP();
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
 
     return () => {
       if (lspClientRef.current) {
@@ -370,8 +393,7 @@ function Room() {
         lspClientRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initializeLSP]);
+  }, [initializeLSP, language, roomId, editorReady]);
 
   // Ensure Monaco model language matches the current language
   useEffect(() => {
