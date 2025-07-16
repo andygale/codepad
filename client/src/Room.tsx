@@ -83,6 +83,7 @@ function Room() {
   const [copyMsg, setCopyMsg] = useState('');
   const [iframeHtml, setIframeHtml] = useState('');
   const [showPlayback, setShowPlayback] = useState(false);
+  const [htmlRunKey, setHtmlRunKey] = useState(0); // Add this to force iframe re-render
 
   // Refs to access current values in socket event handlers without causing re-renders
   const languageRef = useRef(language);
@@ -104,7 +105,25 @@ function Room() {
     python: `import sys\n\nclass Greeter:\n    def __init__(self, message):\n        self.message = message\n    def greet(self):\n        print(self.message)\n        print(f'Running Python {sys.version}')\n\ngreeter = Greeter('Hello, world!')\ngreeter.greet()`,
     cpp: `#include <iostream>\n\nint main() {\n    std::cout << "Hello, world!" << std::endl;\n    std::cout << "Running C++ with GCC " << __GNUC__ << "." << __GNUC_MINOR__ << "." << __GNUC_PATCHLEVEL__ << std::endl;\n    return 0;\n}`,
     java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n        System.out.println("Running Java version: " + System.getProperty("java.version"));\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter("Hello, world!");\n        greeter.greet();\n    }\n}`,
-    html: `<!DOCTYPE html>\n<html>\n<head>\n  <title>Web Example</title>\n  <style>\n    body { font-family: sans-serif; background: #f9f9f9; color: #222; }\n    .greeting { color: #007acc; font-size: 2em; margin-top: 2em; }\n  </style>\n</head>\n<body>\n  <div class="greeting">Hello, world!</div>\n  <script>\n    document.querySelector('.greeting').textContent += ' (from JavaScript!)';\n  </script>\n</body>\n</html>`,
+    html: `<!DOCTYPE html>
+<html>
+<head>
+  <title>Web Example</title>
+  <style>
+    body { font-family: sans-serif; background: #f9f9f9; color: #222; }
+    .greeting { color: #007acc; font-size: 2em; margin-top: 2em; }
+    #time { font-size: 1em; color: #555; margin-top: 1em; }
+  </style>
+</head>
+<body>
+  <div class="greeting">Hello, world!</div>
+  <div id="time"></div>
+  <script>
+    document.querySelector('.greeting').textContent += ' (from JavaScript!)';
+    document.getElementById('time').textContent = 'Rendered at: ' + new Date().toLocaleString();
+  </script>
+</body>
+</html>`,
     swift: `func greet(name: String) {\n    print("Hello, \\(name)!")\n    \n    #if swift(>=5.3)\n    print("Running Swift 5.3 or later")\n    #elseif swift(>=5.0)\n    print("Running Swift 5.0-5.2")\n    #else\n    print("Running Swift < 5.0")\n    #endif\n}\n\ngreet(name: "world")`,
     kotlin: `fun main() {\n    println("Hello, world!")\n    println("Running Kotlin \${kotlin.KotlinVersion.CURRENT}")\n}`,
     plaintext: ''
@@ -438,6 +457,7 @@ function Room() {
       
       if (language === 'html') {
         setIframeHtml(currentCode);
+        setHtmlRunKey(prev => prev + 1); // Increment key to force iframe re-render
         if (socketRef.current && roomId) {
           socketRef.current.emit('runOutput', { output: currentCode, room: roomId });
         }
@@ -774,6 +794,7 @@ function Room() {
               </div>
               {language === 'html' ? (
                 <iframe
+                  key={htmlRunKey} // Add key to force re-render
                   title="Web Output"
                   srcDoc={iframeHtml}
                   style={{ width: '100%', height: '100%', border: '1px solid #444', background: '#fff', borderRadius: 6 }}
