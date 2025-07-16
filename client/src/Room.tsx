@@ -17,6 +17,7 @@ const languages = [
   { label: 'Java', value: 'java' },
   { label: 'JavaScript', value: 'javascript' },
   { label: 'Kotlin', value: 'kotlin' },
+  { label: 'Plain Text', value: 'plaintext' },
   { label: 'Python', value: 'python' },
   { label: 'Swift', value: 'swift' },
   { label: 'TypeScript', value: 'typescript' },
@@ -105,7 +106,8 @@ function Room() {
     java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n        System.out.println("Running Java version: " + System.getProperty("java.version"));\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter("Hello, world!");\n        greeter.greet();\n    }\n}`,
     html: `<!DOCTYPE html>\n<html>\n<head>\n  <title>Web Example</title>\n  <style>\n    body { font-family: sans-serif; background: #f9f9f9; color: #222; }\n    .greeting { color: #007acc; font-size: 2em; margin-top: 2em; }\n  </style>\n</head>\n<body>\n  <div class="greeting">Hello, world!</div>\n  <script>\n    document.querySelector('.greeting').textContent += ' (from JavaScript!)';\n  </script>\n</body>\n</html>`,
     swift: `func greet(name: String) {\n    print("Hello, \\(name)!")\n    \n    #if swift(>=5.3)\n    print("Running Swift 5.3 or later")\n    #elseif swift(>=5.0)\n    print("Running Swift 5.0-5.2")\n    #else\n    print("Running Swift < 5.0")\n    #endif\n}\n\ngreet(name: "world")`,
-    kotlin: `fun main() {\n    println("Hello, world!")\n    println("Running Kotlin \${kotlin.KotlinVersion.CURRENT}")\n}`
+    kotlin: `fun main() {\n    println("Hello, world!")\n    println("Running Kotlin \${kotlin.KotlinVersion.CURRENT}")\n}`,
+    plaintext: ''
   };
 
   const getUserColor = useCallback((userId: string) => {
@@ -694,7 +696,7 @@ function Room() {
             </div>
             <button 
               onClick={handleRun} 
-              disabled={isRunning} 
+              disabled={isRunning || language === 'plaintext'} 
               className="room-button"
             >
               {isRunning ? 'Running...' : 'Run'}
