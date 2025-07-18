@@ -1,8 +1,12 @@
 const axios = require('axios');
 const config = require('../config');
 
+// Log which Piston endpoint is configured at service load time
+console.log(`🔧 CodeExecutionService initialized. Piston endpoint: ${config.pistonApiUrl}`);
+
 class CodeExecutionService {
   async executeCode(code, language) {
+    console.log(`▶️  Executing ${language} code via Piston`);
     try {
       const start = Date.now();
       const response = await axios.post(config.pistonApiUrl, {

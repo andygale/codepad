@@ -329,6 +329,42 @@ class LanguageServerManager {
         const executablePath = path.join(config.serverDir, 'server', 'bin', 'kotlin-language-server');
         if (fs.existsSync(executablePath)) {
           fs.chmodSync(executablePath, '755');
+
+          // Ensure an up-to-date kotlinx-coroutines jar is present for IntelliSense support
+          await (async () => {
+            try {
+              const desiredVersion = '1.10.2';
+              const jarName = `kotlinx-coroutines-core-jvm-${desiredVersion}.jar`;
+              const libDir = path.join(config.serverDir, 'server', 'lib');
+
+              // Remove any old coroutines jars to avoid duplicate classes
+              const existing = fs.readdirSync(libDir).filter(f => f.startsWith('kotlinx-coroutines-core-jvm-') && f.endsWith('.jar'));
+              existing.forEach(f => {
+                if (f !== jarName) {
+                  fs.rmSync(path.join(libDir, f));
+                  console.log(`[LS Manager] Removed outdated ${f}`);
+                }
+              });
+
+              const targetPath = path.join(libDir, jarName);
+              if (!fs.existsSync(targetPath)) {
+                console.log(`[LS Manager] Downloading ${jarName} for coroutine support...`);
+                const axios = (await import('../server/node_modules/axios/index.js')).default;
+                const url = `https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/${desiredVersion}/${jarName}`;
+                const resp = await axios({ method: 'get', url, responseType: 'stream' });
+                const writer = fs.createWriteStream(targetPath);
+                await new Promise((res, rej) => {
+                  resp.data.pipe(writer);
+                  writer.on('finish', res);
+                  writer.on('error', rej);
+                });
+                console.log(`[LS Manager] Added ${jarName}`);
+              }
+            } catch (err) {
+              console.error('[LS Manager] Failed to set up kotlinx-coroutines jar', err);
+            }
+          })();
+
           console.log('Kotlin Language Server installed successfully');
           resolve();
         } else {

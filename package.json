@@ -19,6 +19,8 @@
     "piston:stop": "./piston-local.sh stop",
     "piston:restart": "./piston-local.sh restart",
     "piston:status": "./piston-local.sh status",
+    "piston:install": "./piston-local.sh install",
+    "piston:packages": "./piston-local.sh packages",
     "piston:test": "./piston-local.sh test",
     "dev:local": "yarn piston:start && yarn dev"
   },

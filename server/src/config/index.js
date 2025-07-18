@@ -10,13 +10,14 @@ const config = {
   // Language configurations
   languageVersions: {
     javascript: '18.15.0',
-    python: '3.10.0',
+    python: '3.12.0',
     cpp: '10.2.0',
     java: '15.0.2',
     typescript: '5.0.3',
     deno: '1.32.3',
     swift: '5.3.3',
-    kotlin: '1.8.20'
+    //kotlin: '1.8.20'
+    kotlin: '2.2.0'
   },
 
   fileNames: {
