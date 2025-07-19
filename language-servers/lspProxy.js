@@ -18,31 +18,45 @@ class LSPProxy {
     
     console.log(`[${new Date().toISOString()}] [LSP Proxy] Client connected: ${clientId} (${language}) in room ${roomId}`);
     
-    // Start language server if not already running
+    // Create room-level workspace directory FIRST (shared by all clients in the room)
+    const roomWorkspaceDir = path.join(this.languageServerManager.getWorkspaceDir(), roomId);
+    let workspaceCreated = false;
+    if (!fs.existsSync(roomWorkspaceDir)) {
+        fs.mkdirSync(roomWorkspaceDir, { recursive: true });
+        workspaceCreated = true;
+        
+        // Create proper project structure for Kotlin
+        if (language === 'kotlin') {
+          console.log(`[${new Date().toISOString()}] [LSP Proxy] Initializing Kotlin project structure for room ${roomId}`);
+          await this.initializeKotlinProject(roomWorkspaceDir);
+          console.log(`[${new Date().toISOString()}] [LSP Proxy] Kotlin project structure created for room ${roomId}`);
+        }
+    }
+
+    // Start language server AFTER workspace is ready
     let languageServer;
     try {
-      console.log(`[${new Date().toISOString()}] [LSP Proxy] Starting language server for ${language}...`);
-      languageServer = await this.languageServerManager.startLanguageServer(language);
-      console.log(`[${new Date().toISOString()}] [LSP Proxy] Language server started successfully for ${language}`);
+      console.log(`[${new Date().toISOString()}] [LSP Proxy] Starting language server for ${language} in room ${roomId}...`);
+      languageServer = await this.languageServerManager.startLanguageServer(language, roomId);
+      console.log(`[${new Date().toISOString()}] [LSP Proxy] Language server started successfully for ${language} in room ${roomId}`);
     } catch (error) {
       console.error(`[${new Date().toISOString()}] [LSP Proxy] Failed to start language server for ${language}:`, error);
       socket.emit('lsp-error', { error: `Failed to start ${language} language server: ${error.message}` });
       return;
     }
 
-    // Create a unique workspace directory for this client session
-    const sessionWorkspaceDir = path.join(this.languageServerManager.getWorkspaceDir(), clientId);
-    if (!fs.existsSync(sessionWorkspaceDir)) {
-        fs.mkdirSync(sessionWorkspaceDir, { recursive: true });
-    }
+    // Use simple file path for all languages (consistent with Python/Java approach)
+    const sourceFileName = `main.${this.languageServerManager.getLanguageExtension(language)}`;
+    const sourceFilePath = path.join(roomWorkspaceDir, sourceFileName);
+    const documentUri = `file://${sourceFilePath}`;
+    const sessionWorkspaceDir = roomWorkspaceDir; // For compatibility with existing code
 
-    const documentUri = `file://${path.join(sessionWorkspaceDir, `main.${this.languageServerManager.getLanguageExtension(language)}`)}`;
-
-    // Store client connection (include sessionWorkspaceDir for later use)
+    // Store client connection (include sessionWorkspaceDir and roomId for later use)
     this.clientConnections.set(clientId, {
       socket,
       languageServer,
       language,
+      roomId,
       pendingRequests: new Map(),
       sessionWorkspaceDir
     });
@@ -83,6 +97,44 @@ class LSPProxy {
     });
 
     return { clientId, documentUri };
+  }
+
+  async initializeKotlinProject(projectDir) {
+    console.log(`[${new Date().toISOString()}] [LSP Proxy] Initializing minimal Kotlin project in ${projectDir}`);
+    
+    // Create working Gradle project that should actually resolve dependencies
+    const buildGradleContent = `plugins {
+    kotlin("jvm") version "1.9.22"
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2")
+}`;
+
+    const buildGradlePath = path.join(projectDir, 'build.gradle.kts');
+    if (!fs.existsSync(buildGradlePath)) {
+      fs.writeFileSync(buildGradlePath, buildGradleContent);
+    }
+
+    // Create main.kt directly in project root
+    const mainKtPath = path.join(projectDir, 'main.kt');
+    if (!fs.existsSync(mainKtPath)) {
+      const mainKtContent = `fun main() {
+    println("Hello, Kotlin!")
+}`;
+      fs.writeFileSync(mainKtPath, mainKtContent);
+    }
+    
+    console.log(`[${new Date().toISOString()}] [LSP Proxy] Minimal Kotlin project created with direct JAR references`);
+    
+    // Give Kotlin LS time to process the Gradle project and download/index dependencies
+    console.log(`[${new Date().toISOString()}] [LSP Proxy] Waiting for Kotlin LS to process Gradle project and download coroutines...`);
+    await new Promise(resolve => setTimeout(resolve, 10000)); // More time for network dependency download
   }
 
   setupClientMessageHandlers(clientId, documentUri) {
@@ -340,13 +392,14 @@ class LSPProxy {
       
       connection.languageServer.stdin.write(messageWithHeader);
       
-      // Set timeout for request
+      // Increase timeout for long-running operations like 'initialize'
+      const timeoutMs = method === 'initialize' ? 60000 : 10000;
       setTimeout(() => {
         if (this.messageHandlers.has(requestId)) {
           this.messageHandlers.delete(requestId);
           reject(new Error('Request timeout'));
         }
-      }, 10000);
+      }, timeoutMs);
     });
   }
 

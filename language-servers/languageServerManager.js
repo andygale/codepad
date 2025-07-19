@@ -87,6 +87,109 @@ class LanguageServerManager {
     return this.serverConfigs[language]?.extension || 'txt';
   }
 
+  // Helper to ensure kotlinx-coroutines jar is present inside the Kotlin LS distribution
+  async ensureKotlinCoroutinesJar(config) {
+    try {
+      const desiredVersion = '1.10.2';
+      const jarName = `kotlinx-coroutines-core-jvm-${desiredVersion}.jar`;
+      const libDir = path.join(config.serverDir, 'server', 'lib');
+
+      if (!fs.existsSync(libDir)) {
+        // If lib directory missing something is wrong – bail early
+        console.warn(`[LS Manager] Kotlin LS lib directory not found at ${libDir}`);
+        return;
+      }
+
+      // Remove any outdated coroutine jars to avoid duplicate classes
+      const existing = fs.readdirSync(libDir).filter(f => f.startsWith('kotlinx-coroutines-core-jvm-') && f.endsWith('.jar'));
+      for (const f of existing) {
+        if (f !== jarName) {
+          fs.rmSync(path.join(libDir, f));
+          console.log(`[LS Manager] Removed outdated ${f}`);
+        }
+      }
+
+      const targetPath = path.join(libDir, jarName);
+      let downloaded = false;
+      if (!fs.existsSync(targetPath)) {
+        console.log(`[LS Manager] Downloading ${jarName} for coroutine IntelliSense support...`);
+        const axios = (await import('../server/node_modules/axios/index.js')).default;
+        const url = `https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/${desiredVersion}/${jarName}`;
+        const resp = await axios({ method: 'get', url, responseType: 'stream' });
+        await new Promise((resolve, reject) => {
+          const writer = fs.createWriteStream(targetPath);
+          resp.data.pipe(writer);
+          writer.on('finish', resolve);
+          writer.on('error', reject);
+        });
+        downloaded = true;
+        console.log(`[LS Manager] Added ${jarName} to LS lib`);
+      }
+
+      // Also place the jar in local Maven repository so that the LS can find it when Gradle is absent.
+      try {
+        const homeDir = require('os').homedir();
+        const mavenDir = path.join(homeDir, '.m2', 'repository', 'org', 'jetbrains', 'kotlinx', 'kotlinx-coroutines-core-jvm', desiredVersion);
+        const mavenJarPath = path.join(mavenDir, jarName);
+        if (!fs.existsSync(mavenJarPath)) {
+          if (!fs.existsSync(mavenDir)) {
+            fs.mkdirSync(mavenDir, { recursive: true });
+          }
+          fs.copyFileSync(targetPath, mavenJarPath);
+          console.log(`[LS Manager] Copied ${jarName} to local Maven repo`);
+        }
+      } catch (err) {
+        console.warn('[LS Manager] Could not copy coroutines jar to Maven repo', err);
+      }
+
+      if (downloaded) {
+        console.log(`[LS Manager] kotlinx-coroutines ${desiredVersion} ready`);
+      }
+
+    } catch (err) {
+      console.error('[LS Manager] Failed to set up kotlinx-coroutines jar', err);
+    }
+  }
+
+  async ensureGradleAvailable() {
+    const { spawnSync } = require('child_process');
+    const resCheck = spawnSync('gradle', ['-v']);
+    if (resCheck.status === 0) {
+      return; // Gradle already available
+    }
+
+    // Download portable Gradle distribution into /tmp and expose in PATH
+    const gradleVersion = '8.7';
+    const downloadUrl = `https://services.gradle.org/distributions/gradle-${gradleVersion}-bin.zip`;
+    const destDir = path.join('/tmp', `gradle-${gradleVersion}`);
+    const binDir = path.join(destDir, 'bin');
+    if (fs.existsSync(binDir) && fs.existsSync(path.join(binDir, 'gradle'))) {
+      // Already downloaded
+      process.env.PATH = `${binDir}:${process.env.PATH}`;
+      return;
+    }
+    console.log(`[LS Manager] Downloading Gradle ${gradleVersion} to ${destDir}`);
+    const axios = (await import('../server/node_modules/axios/index.js')).default;
+    const AdmZip = require('../server/node_modules/adm-zip');
+    const resp = await axios({ method: 'get', url: downloadUrl, responseType: 'stream' });
+    const zipPath = path.join('/tmp', `gradle-${gradleVersion}.zip`);
+    await new Promise((resolve, reject) => {
+      const writer = fs.createWriteStream(zipPath);
+      resp.data.pipe(writer);
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
+    const zip = new AdmZip(zipPath);
+    zip.extractAllTo('/tmp', true);
+    fs.unlinkSync(zipPath);
+    if (!fs.existsSync(binDir)) {
+      throw new Error('Gradle extraction failed');
+    }
+    fs.chmodSync(path.join(binDir, 'gradle'), '755');
+    process.env.PATH = `${binDir}:${process.env.PATH}`;
+    console.log(`[LS Manager] Gradle ${gradleVersion} installed`);
+  }
+
   getLanguageServerArgs(language) {
     const config = this.serverConfigs[language];
     
@@ -152,12 +255,13 @@ class LanguageServerManager {
     return config?.args || [];
   }
 
-  async startLanguageServer(language) {
-    console.log(`[LS Manager] Starting language server for ${language} (host arch=${process.arch}, platform=${process.platform})`);
+  async startLanguageServer(language, roomId = null) {
+    const serverKey = roomId ? `${language}-${roomId}` : language;
+    console.log(`[LS Manager] Starting language server for ${language} in room ${roomId || 'global'} (host arch=${process.arch}, platform=${process.platform})`);
     
-    if (this.servers.has(language)) {
-      console.log(`[LS Manager] Language server for ${language} already running`);
-      return this.servers.get(language);
+    if (this.servers.has(serverKey)) {
+      console.log(`[LS Manager] Language server for ${serverKey} already running`);
+      return this.servers.get(serverKey);
     }
 
     const config = this.serverConfigs[language];
@@ -183,6 +287,12 @@ class LanguageServerManager {
       }
     }
     
+    // For Kotlin ensure coroutines jar exists even if LS was previously installed
+    if (language === 'kotlin') {
+      await this.ensureKotlinCoroutinesJar(config);
+      await this.ensureGradleAvailable();
+    }
+
     // Get the correct args for the language server
     const args = this.getLanguageServerArgs(language);
     const cwd = language === 'kotlin' ? path.join(config.serverDir, 'server') : config.serverDir;
@@ -213,16 +323,16 @@ class LanguageServerManager {
         stderr: server.stderr
       };
 
-      this.servers.set(language, serverInfo);
+      this.servers.set(serverKey, serverInfo);
 
       server.on('exit', (code, signal) => {
-        console.log(`[LS Manager] ${config.name} exited with code ${code}, signal ${signal}`);
-        this.servers.delete(language);
+        console.log(`[LS Manager] ${config.name} (${serverKey}) exited with code ${code}, signal ${signal}`);
+        this.servers.delete(serverKey);
       });
 
       server.on('error', (error) => {
-        console.error(`[LS Manager] ${config.name} error:`, error);
-        this.servers.delete(language);
+        console.error(`[LS Manager] ${config.name} (${serverKey}) error:`, error);
+        this.servers.delete(serverKey);
       });
 
       // Wait briefly; if the process has already exited, treat as failure.
@@ -240,12 +350,13 @@ class LanguageServerManager {
     }
   }
 
-  async stopLanguageServer(language) {
-    const server = this.servers.get(language);
+  async stopLanguageServer(language, roomId = null) {
+    const serverKey = roomId ? `${language}-${roomId}` : language;
+    const server = this.servers.get(serverKey);
     if (server) {
       server.process.kill();
-      this.servers.delete(language);
-      console.log(`Stopped ${server.config.name}`);
+      this.servers.delete(serverKey);
+      console.log(`Stopped ${server.config.name} (${serverKey})`);
     }
   }
 
@@ -255,8 +366,9 @@ class LanguageServerManager {
     }
   }
 
-  getLanguageServer(language) {
-    return this.servers.get(language);
+  getLanguageServer(language, roomId = null) {
+    const serverKey = roomId ? `${language}-${roomId}` : language;
+    return this.servers.get(serverKey);
   }
 
   async isLanguageServerInstalled(language) {
@@ -305,7 +417,7 @@ class LanguageServerManager {
     response.data.pipe(writer);
 
     return new Promise((resolve, reject) => {
-      writer.on('finish', () => {
+      writer.on('finish', async () => {
         const zip = new AdmZip(zipPath);
         zip.extractAllTo(config.serverDir, true);
         fs.unlinkSync(zipPath);
@@ -331,39 +443,7 @@ class LanguageServerManager {
           fs.chmodSync(executablePath, '755');
 
           // Ensure an up-to-date kotlinx-coroutines jar is present for IntelliSense support
-          await (async () => {
-            try {
-              const desiredVersion = '1.10.2';
-              const jarName = `kotlinx-coroutines-core-jvm-${desiredVersion}.jar`;
-              const libDir = path.join(config.serverDir, 'server', 'lib');
-
-              // Remove any old coroutines jars to avoid duplicate classes
-              const existing = fs.readdirSync(libDir).filter(f => f.startsWith('kotlinx-coroutines-core-jvm-') && f.endsWith('.jar'));
-              existing.forEach(f => {
-                if (f !== jarName) {
-                  fs.rmSync(path.join(libDir, f));
-                  console.log(`[LS Manager] Removed outdated ${f}`);
-                }
-              });
-
-              const targetPath = path.join(libDir, jarName);
-              if (!fs.existsSync(targetPath)) {
-                console.log(`[LS Manager] Downloading ${jarName} for coroutine support...`);
-                const axios = (await import('../server/node_modules/axios/index.js')).default;
-                const url = `https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/${desiredVersion}/${jarName}`;
-                const resp = await axios({ method: 'get', url, responseType: 'stream' });
-                const writer = fs.createWriteStream(targetPath);
-                await new Promise((res, rej) => {
-                  resp.data.pipe(writer);
-                  writer.on('finish', res);
-                  writer.on('error', rej);
-                });
-                console.log(`[LS Manager] Added ${jarName}`);
-              }
-            } catch (err) {
-              console.error('[LS Manager] Failed to set up kotlinx-coroutines jar', err);
-            }
-          })();
+          await this.ensureKotlinCoroutinesJar(config);
 
           console.log('Kotlin Language Server installed successfully');
           resolve();
