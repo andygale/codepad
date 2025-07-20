@@ -19,7 +19,6 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:3001/api/info"]
       interval: 30s
       timeout: 10s
-      start-period: 5s
       retries: 3
 
   # Optional: Include Piston if you want to run your own code execution

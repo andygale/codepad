@@ -33,5 +33,8 @@ LOG_LEVEL=info
 # MAX_CONCURRENT_EXECUTIONS=10
 # EXECUTION_TIMEOUT=30000
 
-# Optional: If behind Application Load Balancer
-# TRUST_PROXY=true 
+# Optional: If behind Application Load Balancer or Nginx proxy
+# TRUST_PROXY=true
+
+# Optional: If using Nginx reverse proxy for port 80
+# NGINX_PROXY=true 
