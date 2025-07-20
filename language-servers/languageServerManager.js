@@ -256,6 +256,10 @@ class LanguageServerManager {
   }
 
   async startLanguageServer(language, roomId = null) {
+    // For Kotlin we keep a single shared server across rooms
+    if (language === 'kotlin') {
+      roomId = null;
+    }
     const serverKey = roomId ? `${language}-${roomId}` : language;
     console.log(`[LS Manager] Starting language server for ${language} in room ${roomId || 'global'} (host arch=${process.arch}, platform=${process.platform})`);
     

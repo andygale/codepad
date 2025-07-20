@@ -9,6 +9,11 @@ class LSPProxy {
     this.clientConnections = new Map();
     this.buffers = new Map();
     this.messageHandlers = new Map(); // requestId -> { clientId, resolve, reject }
+
+    // Shared Kotlin LS state
+    this.kotlinInitialized = false;
+    this.kotlinCapabilities = null; // cache of initialize result
+    this.roomRefCount = new Map(); // roomId -> active clients count
     
     console.log(`[${new Date().toISOString()}] [LSP Proxy] LSP Proxy initialized`);
   }
@@ -37,7 +42,7 @@ class LSPProxy {
     let languageServer;
     try {
       console.log(`[${new Date().toISOString()}] [LSP Proxy] Starting language server for ${language} in room ${roomId}...`);
-      languageServer = await this.languageServerManager.startLanguageServer(language, roomId);
+      languageServer = await this.languageServerManager.startLanguageServer(language, language === 'kotlin' ? null : roomId);
       console.log(`[${new Date().toISOString()}] [LSP Proxy] Language server started successfully for ${language} in room ${roomId}`);
     } catch (error) {
       console.error(`[${new Date().toISOString()}] [LSP Proxy] Failed to start language server for ${language}:`, error);
@@ -49,6 +54,7 @@ class LSPProxy {
     const sourceFileName = `main.${this.languageServerManager.getLanguageExtension(language)}`;
     const sourceFilePath = path.join(roomWorkspaceDir, sourceFileName);
     const documentUri = `file://${sourceFilePath}`;
+    const workspaceUri = `file://${roomWorkspaceDir}`;
     const sessionWorkspaceDir = roomWorkspaceDir; // For compatibility with existing code
 
     // Store client connection (include sessionWorkspaceDir and roomId for later use)
@@ -58,8 +64,15 @@ class LSPProxy {
       language,
       roomId,
       pendingRequests: new Map(),
-      sessionWorkspaceDir
+      sessionWorkspaceDir,
+      workspaceUri
     });
+
+    // Update room reference count (for Kotlin shared LS)
+    if (language === 'kotlin') {
+      const current = this.roomRefCount.get(roomId) || 0;
+      this.roomRefCount.set(roomId, current + 1);
+    }
 
     // Set up message handlers
     console.log(`[${new Date().toISOString()}] [LSP Proxy] Setting up message handlers for client ${clientId}`);
@@ -85,6 +98,34 @@ class LSPProxy {
             console.log(`[${new Date().toISOString()}] [LSP Proxy] Removed session directory: ${sessionWorkspaceDir}`);
           }
         });
+      }
+
+      // Kotlin shared LS: manage room reference count and workspace folder removal
+      const conn = this.clientConnections.get(clientId);
+      if (conn && conn.language === 'kotlin') {
+        const cur = this.roomRefCount.get(roomId) || 0;
+        if (cur > 0) {
+          this.roomRefCount.set(roomId, cur - 1);
+          if (cur - 1 === 0) {
+            try {
+              const removeParams = {
+                event: {
+                  added: [],
+                  removed: [{ uri: conn.workspaceUri, name: path.basename(conn.sessionWorkspaceDir) }]
+                }
+              };
+              const message = {
+                jsonrpc: '2.0',
+                method: 'workspace/didChangeWorkspaceFolders',
+                params: removeParams
+              };
+              const msgStr = JSON.stringify(message);
+              conn.languageServer.stdin.write(`Content-Length: ${msgStr.length}\r\n\r\n${msgStr}`);
+            } catch (err) {
+              console.error('[LSP Proxy] Error sending remove workspace folder', err);
+            }
+          }
+        }
       }
 
       // Clean up pending requests
@@ -133,8 +174,9 @@ dependencies {
     console.log(`[${new Date().toISOString()}] [LSP Proxy] Minimal Kotlin project created with direct JAR references`);
     
     // Give Kotlin LS time to process the Gradle project and download/index dependencies
-    console.log(`[${new Date().toISOString()}] [LSP Proxy] Waiting for Kotlin LS to process Gradle project and download coroutines...`);
-    await new Promise(resolve => setTimeout(resolve, 10000)); // More time for network dependency download
+    const delayMs = this.kotlinInitialized ? 2000 : 10000;
+    console.log(`[${new Date().toISOString()}] [LSP Proxy] Waiting ${delayMs}ms for Kotlin LS to process Gradle project...`);
+    await new Promise(resolve => setTimeout(resolve, delayMs));
   }
 
   setupClientMessageHandlers(clientId, documentUri) {
@@ -254,8 +296,20 @@ dependencies {
     // Use the session-specific workspace directory for this client
     const workspacePath = connection.sessionWorkspaceDir || path.join(__dirname, 'workspace');
     const workspaceUri = `file://${workspacePath}`;
-    
-    console.log(`[${new Date().toISOString()}] [LSP Proxy] Initializing language server with workspace: ${workspaceUri}`);
+ 
+     console.log(`[${new Date().toISOString()}] [LSP Proxy] Initializing language server with workspace: ${workspaceUri}`);
+
+    // If Kotlin LS already initialized, just add workspace folder and return instantly
+    if (connection.language === 'kotlin' && this.kotlinInitialized) {
+      // Send workspace/didChangeWorkspaceFolders add
+      await this.sendNotification(clientId, 'workspace/didChangeWorkspaceFolders', {
+        event: {
+          added: [{ uri: workspaceUri, name: path.basename(workspacePath) }],
+          removed: []
+        }
+      });
+      return;
+    }
 
     const initializeParams = {
       processId: process.pid,
@@ -354,8 +408,11 @@ dependencies {
     };
 
     try {
-      // Send initialize request and wait for response
-      await this.sendRequest(clientId, 'initialize', initializeParams);
+      const initResult = await this.sendRequest(clientId, 'initialize', initializeParams);
+      if (connection.language === 'kotlin') {
+        this.kotlinInitialized = true;
+        this.kotlinCapabilities = initResult;
+      }
 
       // Per LSP spec, the client MUST send an 'initialized' notification once it receives the response
       await this.sendNotification(clientId, 'initialized', {});
