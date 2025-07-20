@@ -74,6 +74,7 @@ function Room() {
   const isRemoteUpdate = useRef(false);
   const isLocalLanguageUpdate = useRef(false);
   const [lspStatus, setLspStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [lspEnabled, setLspEnabled] = useState(true);
 
   const lspClientRef = useRef<LSPClient | null>(null);
   const [editorReady, setEditorReady] = useState(false);
@@ -322,7 +323,37 @@ function Room() {
     return () => clearInterval(interval);
   }, [language, users]); 
 
+  const toggleLSP = useCallback(() => {
+    setLspEnabled(prev => {
+      const newEnabled = !prev;
+      if (!newEnabled && lspClientRef.current) {
+        // Disable LSP - disconnect and clear markers
+        lspClientRef.current.disconnect();
+        lspClientRef.current = null;
+        setLspStatus('disconnected');
+        if (monacoRef.current && editorRef.current) {
+          monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'lsp', []);
+        }
+      } else if (newEnabled && editorRef.current && socketRef.current && roomId && editorReady) {
+        // Enable LSP - reinitialize
+        setTimeout(() => initializeLSP(), 100);
+      }
+      return newEnabled;
+    });
+  }, [roomId, editorReady]);
+
   const initializeLSP = useCallback(() => {
+        // Don't initialize if LSP is disabled
+        if (!lspEnabled) {
+            console.log(`[Room] LSP is disabled by user`);
+            if (lspClientRef.current) {
+                lspClientRef.current.disconnect();
+                lspClientRef.current = null;
+                setLspStatus('disconnected');
+            }
+            return;
+        }
+        
         if (!editorRef.current || !socketRef.current || !roomId || !editorReady) {
             console.log(`[Room] Missing requirements - editor: ${!!editorRef.current}, socket: ${!!socketRef.current}, roomId: ${roomId}, editorReady: ${editorReady}`);
             return;
@@ -391,7 +422,7 @@ function Room() {
 
         connectWithRetry(3);
 
-    }, [language, roomId, editorReady]);
+    }, [language, roomId, editorReady, lspEnabled]);
 
   useEffect(() => {
     console.log(`[Room] useEffect triggered for LSP initialization - language: ${language}, roomId: ${roomId}, editor: ${!!editorRef.current}, socket: ${!!socketRef.current}, editorReady: ${editorReady}`);
@@ -756,20 +787,36 @@ function Room() {
                 ))}
               </select>
               {(['kotlin', 'java', 'python'].includes(language)) && (
-                <div style={{ 
+                <div 
+                  onClick={toggleLSP}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.borderColor = 'transparent';
+                  }}
+                  style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
                   gap: '4px',
                   fontSize: '12px',
-                  color: lspStatus === 'connected' ? '#4CAF50' : (lspStatus === 'connecting' ? '#FF9800' : '#FF5722')
+                  color: !lspEnabled ? '#9E9E9E' : (lspStatus === 'connected' ? '#4CAF50' : (lspStatus === 'connecting' ? '#FF9800' : '#FF5722')),
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  border: '1px solid transparent',
+                  transition: 'all 0.2s ease'
                 }}>
                   <div style={{ 
                     width: '8px', 
                     height: '8px', 
                     borderRadius: '50%', 
-                    backgroundColor: lspStatus === 'connected' ? '#4CAF50' : (lspStatus === 'connecting' ? '#FF9800' : '#FF5722')
+                    backgroundColor: !lspEnabled ? '#9E9E9E' : (lspStatus === 'connected' ? '#4CAF50' : (lspStatus === 'connecting' ? '#FF9800' : '#FF5722'))
                   }} />
-                  IntelliSense {lspStatus === 'connected' ? 'On' : (lspStatus === 'connecting' ? 'Loading...' : 'Failed')}
+                  IntelliSense {!lspEnabled ? 'Off' : (lspStatus === 'connected' ? 'On' : (lspStatus === 'connecting' ? 'Loading...' : 'Failed'))}
                 </div>
               )}
             </div>
