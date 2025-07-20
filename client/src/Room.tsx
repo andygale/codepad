@@ -418,6 +418,12 @@ function Room() {
   useEffect(() => {
     if (editorRef.current && monacoRef.current) {
       try {
+        // Clear existing markers before changing language
+        monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'typescript', []);
+        monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'python', []);
+        monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'javascript', []);
+        monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'lsp', []);
+        
         monacoRef.current.editor.setModelLanguage(editorRef.current.getModel(), language);
       } catch (err) {
         console.error('Failed to set Monaco model language:', err);
@@ -510,6 +516,37 @@ function Room() {
     editorRef.current = editor;
     monacoRef.current = monaco;
     decorationsCollectionRef.current = editor.createDecorationsCollection();
+    
+    // Disable built-in validation for all languages to rely on LSP only
+    try {
+      // For Python - disable built-in validation since we have LSP
+      if (monaco.languages.python?.pythonDefaults) {
+        monaco.languages.python.pythonDefaults.setDiagnosticsOptions({
+          noSemanticValidation: true,
+          noSyntaxValidation: true
+        });
+      }
+      
+      // Intercept setModelMarkers to block built-in validation for LSP-supported languages only
+      const originalSetModelMarkers = monaco.editor.setModelMarkers;
+      monaco.editor.setModelMarkers = function(model: any, owner: string, markers: any[]) {
+        // Allow LSP markers and TypeScript/JavaScript built-in markers
+        if (owner === 'lsp' || owner === 'typescript' || owner === 'javascript') {
+          return originalSetModelMarkers.call(this, model, owner, markers);
+        }
+        // Block built-in validators for LSP-supported languages (python, java, kotlin)
+        console.log(`[Monaco] Blocked markers from ${owner}:`, markers);
+        return originalSetModelMarkers.call(this, model, owner, []);
+      };
+    } catch (err) {
+      console.warn('Failed to configure Monaco validation:', err);
+    }
+    
+    // Clear any existing markers to start with a clean state
+    monaco.editor.setModelMarkers(editor.getModel(), 'typescript', []);
+    monaco.editor.setModelMarkers(editor.getModel(), 'python', []);
+    monaco.editor.setModelMarkers(editor.getModel(), 'javascript', []);
+    
     setEditorReady(true);
 
     // Main content change handler

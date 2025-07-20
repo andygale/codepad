@@ -92,7 +92,10 @@ class LanguageServerService {
       // If no more clients for this room, we could optionally shut down the language server
       if (roomConnections.size === 0) {
         this.clientConnections.delete(roomId);
-        // Optionally: await this.languageServerManager.stopLanguageServer(clientInfo.language);
+        // Stop language server for non-Kotlin to ensure fresh state on reconnection
+        if (clientInfo.language !== 'kotlin') {
+          await this.lspProxy.languageServerManager.stopLanguageServer(clientInfo.language, roomId);
+        }
       }
 
       console.log(`[${new Date().toISOString()}] [LSP] LSP client disconnected: ${socketId} from room ${roomId}`);

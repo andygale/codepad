@@ -66,6 +66,9 @@ export class LSPClient {
         this.registerProviders();
         this.onConnected();
 
+        // Clear existing LSP markers to avoid stale errors
+        this.monaco.editor.setModelMarkers(this.editor.getModel()!, 'lsp', []);
+
         // Send didOpen notification
         this.sendNotification('textDocument/didOpen', {
           textDocument: {
@@ -88,6 +91,15 @@ export class LSPClient {
   }
   
   public disconnect(): void {
+    // Notify LSP server of document close to clear diagnostics server-side
+    if (this.isConnected && this.documentUri) {
+      this.sendNotification('textDocument/didClose', {
+        textDocument: { uri: this.documentUri }
+      });
+    }
+    // Clear any existing LSP markers on disconnect to remove stale errors
+    this.monaco.editor.setModelMarkers(this.editor.getModel()!, 'lsp', []);
+
     if (this.socket) {
       this.socket.off('lsp-connected');
       this.socket.off('lsp-error');
