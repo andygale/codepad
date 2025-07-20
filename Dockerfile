@@ -1,5 +1,5 @@
 # Multi-stage build for production
-FROM --platform=linux/arm64 node:20-bookworm AS builder
+FROM node:20-bookworm AS builder
 
 # Install Java 21 from Eclipse Temurin (required for Java Language Server)
 RUN apt-get update && \
@@ -32,8 +32,8 @@ RUN node language-servers/install.js
 # Build the application
 RUN yarn docker:build
 
-# Production stage
-FROM --platform=linux/arm64 node:20-bookworm
+# Production stage  
+FROM node:20-bookworm
 
 # Install Java 21 from Eclipse Temurin and GUI libraries
 RUN apt-get update && \

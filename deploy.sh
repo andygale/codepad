@@ -43,9 +43,9 @@ fi
 echo "🛑 Stopping existing containers..."
 docker-compose -f docker-compose.prod.yml down || true
 
-# Remove old images to force rebuild
+# Remove old images to force rebuild (including platform issues)
 echo "🧹 Cleaning up old images..."
-docker image prune -f
+docker system prune -f
 docker-compose -f docker-compose.prod.yml build --no-cache
 
 # Start services

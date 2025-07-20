@@ -1,6 +1,5 @@
 services:
   codecrush:
-    platform: linux/arm64
     build: .
     ports:
       - "3001:3001"
