@@ -1,0 +1,37 @@
+# Production Environment Configuration for AWS EC2 + RDS
+# Copy this file to .env on your EC2 instance and customize the values
+
+NODE_ENV=production
+PORT=3001
+
+# Database Configuration (AWS RDS)
+# Replace with your actual RDS endpoint and credentials
+DATABASE_URL=postgresql://username:password@your-rds-endpoint.region.rds.amazonaws.com:5432/codecrush
+DATABASE_SSL=true
+
+# Code Execution Service
+# Option 1: Use hosted Piston (rate limited)
+# PISTON_API_URL=https://emkc.org/api/v2/piston/execute
+
+# Option 2: Use your own Piston instance (recommended)
+# PISTON_API_URL=https://your-piston-service.onrender.com/api/v2/execute
+
+# Option 3: Local Piston (if running on same EC2)
+PISTON_API_URL=http://localhost:2000/api/v2/execute
+
+# Authentication (if implementing Google OAuth)
+# GOOGLE_CLIENT_ID=your_google_client_id
+# GOOGLE_CLIENT_SECRET=your_google_client_secret
+
+# Security
+# SESSION_SECRET=your_random_session_secret
+
+# Logging
+LOG_LEVEL=info
+
+# Performance
+# MAX_CONCURRENT_EXECUTIONS=10
+# EXECUTION_TIMEOUT=30000
+
+# Optional: If behind Application Load Balancer
+# TRUST_PROXY=true 

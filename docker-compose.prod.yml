@@ -1,0 +1,42 @@
+services:
+  codecrush:
+    platform: linux/arm64
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=${DATABASE_URL}  # Will point to RDS
+      - DATABASE_SSL=true  # RDS typically requires SSL
+      - PISTON_API_URL=${PISTON_API_URL}
+    restart: unless-stopped
+    volumes:
+      - language-servers:/app/language-servers
+    networks:
+      - codecrush-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/info"]
+      interval: 30s
+      timeout: 10s
+      start-period: 5s
+      retries: 3
+
+  # Optional: Include Piston if you want to run your own code execution
+  # Uncomment this section if you prefer local Piston over external service
+  # piston:
+  #   image: ghcr.io/engineer-man/piston:latest
+  #   platform: linux/amd64
+  #   privileged: true
+  #   ports:
+  #     - "2000:2000"
+  #   restart: unless-stopped
+  #   networks:
+  #     - codecrush-network
+
+volumes:
+  language-servers:
+
+networks:
+  codecrush-network:
+    driver: bridge 
