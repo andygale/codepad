@@ -61,8 +61,8 @@ RUN yarn install --production --cwd server
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Create non-root user and set permissions
-RUN groupadd -r codecrush && useradd -r -g codecrush codecrush
+# Create non-root user, its home directory (-m), and set permissions
+RUN groupadd -r codecrush && useradd --no-log-init -r -g codecrush -m -d /home/codecrush codecrush
 RUN chown -R codecrush:codecrush /app
 USER codecrush
 
