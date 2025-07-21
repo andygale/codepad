@@ -9,6 +9,7 @@ services:
       - DATABASE_URL=${DATABASE_URL}  # Will point to RDS
       - DATABASE_SSL=true  # RDS typically requires SSL
       - PISTON_API_URL=${PISTON_API_URL}
+      - NODE_TLS_REJECT_UNAUTHORIZED=0 # <-- FIX for RDS certificate issue
     restart: unless-stopped
     volumes:
       - language-servers:/app/language-servers
