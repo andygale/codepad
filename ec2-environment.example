@@ -20,7 +20,7 @@ NODE_TLS_REJECT_UNAUTHORIZED=0
 # PISTON_API_URL=https://your-piston-service.onrender.com/api/v2/execute
 
 # Option 3: Local Piston (if running on same EC2)
-PISTON_API_URL=http://localhost:2000/api/v2/execute
+PISTON_API_URL=http://host.docker.internal:2000/api/v2/execute
 
 # Authentication (if implementing Google OAuth)
 # GOOGLE_CLIENT_ID=your_google_client_id

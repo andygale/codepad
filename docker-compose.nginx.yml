@@ -8,13 +8,16 @@ services:
       - PORT=3001
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE_SSL=true
-      - PISTON_API_URL=${PISTON_API_URL}
-      - NODE_TLS_REJECT_UNAUTHORIZED=0 # <-- FIX for RDS certificate issue
+      - PISTON_API_URL=http://host.docker.internal:2000/api/v2
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
     restart: unless-stopped
     volumes:
       - language-servers:/app/language-servers
     networks:
       - codecrush-network
+    # Add this to resolve the host machine's IP. Should work on modern Docker.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   nginx:
     image: nginx:alpine
