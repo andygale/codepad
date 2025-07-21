@@ -9,6 +9,9 @@ PORT=3001
 DATABASE_URL=postgresql://username:password@your-rds-endpoint.region.rds.amazonaws.com:5432/codecrush
 DATABASE_SSL=true
 
+# Tell Node.js to accept self-signed certificates from RDS
+NODE_TLS_REJECT_UNAUTHORIZED=0
+
 # Code Execution Service
 # Option 1: Use hosted Piston (rate limited)
 # PISTON_API_URL=https://emkc.org/api/v2/piston/execute
