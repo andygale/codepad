@@ -122,6 +122,7 @@ Your EC2 instance needs to be able to connect to the RDS database.
 ### **6\. Connect to EC2 Instance and Install Docker**
 
 Now, you'll connect to your EC2 instance and prepare it for Docker.
+AGALE - switch to AWS-DEPLOYMENT.md here
 
 1. **Get EC2 Public IP:** In the EC2 Dashboard, click **Instances**, select your my-app-docker-host instance, and note its **Public IPv4 address**.  
 2. **SSH into EC2:** Open a terminal on your local machine.  

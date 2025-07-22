@@ -92,9 +92,22 @@ exit
 ```
 
 ### 3.2 Deploy Application
+AGALE - Piston docker instructions are in the piston directory.  Here is the short version
+time scp -i ta-codecrush-key.pem piston-codecrush-2025-07-20-image.tar ubuntu@35.172.115.130:/home/ubuntu
+time docker load < piston-codecrush-2025-07-20-image.tar
+docker run --privileged -dit -p 2000:2000 --name piston-2025-07-20 piston-2025-07-20
+curl http://localhost:2000/api/v2/runtimes
+
+troubleshoot by installing netstat tools for this older Debian version named Buster
+echo -e "deb http://archive.debian.org/debian/ buster main\ndeb http://archive.debian.org/debian/ buster-updates main\ndeb http://archive.debian.org/debian-security buster/updates main" > /etc/apt/sources.list
+apt-get update
+apt-get install -y net-tools
+apt-get install -y curl
+netstat -tulpn
+
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/coder-pad-clone.git codecrush
+git clone https://github.com/andygale/codepad.git codecrush
 cd codecrush
 
 # Copy and configure environment
@@ -122,6 +135,48 @@ PISTON_API_URL=https://emkc.org/api/v2/piston/execute  # Public API
 # GOOGLE_CLIENT_SECRET=your_google_client_secret
 ```
 
+## Step 4: Database Setup
+
+### 4.1 Connect to RDS and Create Database
+```bash
+# Connect to RDS from EC2 (install psql if needed)
+sudo apt install -y postgresql-client
+
+# Connect to your RDS instance
+psql -h your-rds-endpoint.region.rds.amazonaws.com -U codecrush -d postgres
+
+If it doesn't connect, follow these steps
+
+Step 1: Find Your EC2 Instance's Security Group
+First, you need to know the ID of the security group your EC2 instance is using.
+Navigate to the EC2 Dashboard in the AWS Console.
+Click on Instances in the left sidebar.
+Select your EC2 instance.
+In the details pane below, click on the Security tab.
+Copy the Security group ID (it will look like sg-0123456789abcdef).
+
+Step 2: Add an Inbound Rule to Your RDS Security Group
+Now, you'll tell your RDS database to accept connections from that EC2 security group.
+Navigate to the RDS Dashboard in the AWS Console.
+Click on Databases in the left sidebar and select your database instance (codecrush-db-instance-1).
+Click on the Connectivity & security tab.
+In the Security section, you'll see a link for VPC security groups. Click on it. This will take you back to the EC2 security group console, but with the RDS group selected.
+Select the security group associated with your RDS instance.
+In the details pane below, click on the Inbound rules tab.
+Click the Edit inbound rules button.
+Click Add rule.
+Fill out the new rule's fields:
+Type: Select PostgreSQL from the dropdown. This will automatically fill in the protocol (TCP) and port (5432).
+Source: This is the critical step. Paste the EC2 security group ID you copied in Step 1 into the search box. Select it from the list.
+Description (Optional): Add a note like Allow inbound from EC2 instance.
+Click Save rules.
+The changes are applied almost immediately.
+
+# Create database
+CREATE DATABASE codecrush;
+\q
+```
+
 ### 3.4 Initialize Database
 ```bash
 # Run database migrations (first time only)
@@ -138,21 +193,6 @@ nano deploy.sh
 
 # Run deployment
 ./deploy.sh
-```
-
-## Step 4: Database Setup
-
-### 4.1 Connect to RDS and Create Database
-```bash
-# Connect to RDS from EC2 (install psql if needed)
-sudo apt install -y postgresql-client
-
-# Connect to your RDS instance
-psql -h your-rds-endpoint.region.rds.amazonaws.com -U codecrush -d postgres
-
-# Create database
-CREATE DATABASE codecrush;
-\q
 ```
 
 ### 4.2 Run Migrations
