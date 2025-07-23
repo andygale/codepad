@@ -830,7 +830,6 @@ function Room() {
             
             {isAuthenticated && user ? (
               <div className="user-info">
-                <img src={user.picture} alt={user.name} className="user-avatar" />
                 <span className="user-name">{user.name}</span>
               </div>
             ) : (

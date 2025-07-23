@@ -1,12 +1,14 @@
 const express = require('express');
 const codeExecutionService = require('../services/codeExecutionService');
 const roomService = require('../services/roomService');
+const { requireAuth } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-router.get('/rooms', async (req, res) => {
+router.get('/rooms', requireAuth, async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
   const limit = 10;
+  // Only filter by creatorEmail if explicitly provided in query params
   const creatorEmail = req.query.creatorEmail || null;
 
   const { rooms, totalCount } = await roomService.getAllRooms(page, limit, creatorEmail);
@@ -26,13 +28,15 @@ router.get('/rooms/:roomId', async (req, res) => {
   }
 });
 
-router.post('/rooms', async (req, res) => {
+router.post('/rooms', requireAuth, async (req, res) => {
   try {
-    const { title, creator, creator_email } = req.body;
+    const { title } = req.body;
+    const { name: creator, email: creator_email } = req.session.user;
+
     if (!title) {
       return res.status(400).json({ error: 'Title is required' });
     }
-    const newRoom = await roomService.createRoom(title, creator || 'Anonymous', creator_email);
+    const newRoom = await roomService.createRoom(title, creator, creator_email);
     res.status(201).json(newRoom);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create room' });

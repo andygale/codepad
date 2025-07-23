@@ -1,38 +1,77 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
 
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const session = require('express-session');
+const PgSession = require('connect-pg-simple')(session);
 
 const config = require('./config');
 const apiRoutes = require('./routes/api');
+const authRoutes = require('./routes/authRoutes');
 const setupRoomHandlers = require('./sockets/roomHandlers');
 const LanguageServerService = require('./services/languageServerService');
+const dbService = require('./services/dbService');
 
 const app = express();
 const server = http.createServer(app);
+
+// Trust the first proxy if configured
+if (config.trustProxy) {
+  app.set('trust proxy', 1);
+}
+
+// Session middleware setup
+const sessionMiddleware = session({
+  store: new PgSession({
+    pool: dbService.getPool(),
+    tableName: 'user_sessions',
+  }),
+  secret: config.sessionSecret || 'default_secret', // Fallback for safety
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: config.nodeEnv === 'production',
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
+  },
+});
 
 // Socket.IO setup
 const io = new Server(server, {
   cors: {
     origin: config.corsOrigin,
-    methods: ['GET', 'POST']
+    methods: ['GET', 'POST'],
+    credentials: true,
   },
-  transports: ['websocket']
+  transports: ['websocket'],
 });
 
 // Initialize Language Server Service
 const languageServerService = new LanguageServerService();
 languageServerService.initialize();
 
-// Middleware
-app.use(cors());
+// Apply middleware
+app.use(sessionMiddleware);
+app.use(cors({
+  origin: config.corsOrigin,
+  credentials: true
+}));
 app.use(express.json());
+
 
 // API Routes
 app.use('/api', apiRoutes);
+app.use('/api/auth', authRoutes);
+
+
+// Share session middleware with Socket.IO
+io.use((socket, next) => {
+  sessionMiddleware(socket.request, {}, next);
+});
+
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
@@ -46,7 +85,7 @@ app.use(express.static(path.join(__dirname, '../../client/build')));
 
 // Development info endpoint
 app.get('/api/info', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'CodeCrush Server is running',
     version: '1.0.0',
     environment: config.nodeEnv,
@@ -54,10 +93,10 @@ app.get('/api/info', (req, res) => {
       execute: 'POST /api/execute',
       info: 'GET /api/info',
       languageServer: 'GET /api/language-server/status',
-      websocket: 'ws://localhost:' + config.port
+      websocket: 'ws://localhost:' + (config.port || 3001),
     },
     pistonApi: config.pistonApiUrl,
-    languageServer: languageServerService.getStatus()
+    languageServer: languageServerService.getStatus(),
   });
 });
 
@@ -72,8 +111,9 @@ app.get('*', (req, res) => {
 });
 
 // Start server
-server.listen(config.port, '0.0.0.0', () => {
-  console.log(`🚀 CodeCrush Server listening on port ${config.port}`);
+const PORT = config.port || 3001;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 CodeCrush Server listening on port ${PORT}`);
   console.log(`📁 Environment: ${config.nodeEnv}`);
   console.log(`🔧 Piston API: ${config.pistonApiUrl}`);
   console.log(`🔧 Language Server: Available`);

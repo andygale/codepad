@@ -11,7 +11,7 @@ import { Pagination } from 'antd';
 import Room from './Room';
 import GuestJoin from './GuestJoin';
 import { AuthProvider, useAuth } from './AuthContext';
-import GoogleOneTap from './GoogleOneTap';
+import HandleRedirect from './HandleRedirect'; // Import the new component
 import './App.css';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
@@ -34,19 +34,26 @@ function LandingPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalRooms, setTotalRooms] = useState(0);
   const navigate = useNavigate();
-  const { user, isAuthenticated, isAuthorized, logout, loading } = useAuth();
+  const { user, isAuthenticated, login, logout, loading, initializeAuth } = useAuth(); // Updated to use new functions
   const ROOMS_PER_PAGE = 10;
 
   useEffect(() => {
+    // Initialize authentication when landing page loads
+    initializeAuth();
+  }, [initializeAuth]);
+
+  useEffect(() => {
     const fetchRooms = async () => {
-      if (!isAuthorized) return;
+      if (!isAuthenticated) return;
       
       try {
         let url = `${API_URL}/api/rooms?page=${currentPage}&limit=${ROOMS_PER_PAGE}`;
         if (showMyRooms && user?.email) {
           url += `&creatorEmail=${user.email}`;
         }
-        const response = await axios.get<{ rooms: RoomData[], totalCount: number }>(url);
+        const response = await axios.get<{ rooms: RoomData[], totalCount: number }>(url, {
+          withCredentials: true,
+        });
         setRooms(response.data.rooms);
         setTotalRooms(response.data.totalCount);
       } catch (err) {
@@ -55,12 +62,12 @@ function LandingPage() {
       }
     };
     fetchRooms();
-  }, [isAuthorized, currentPage, showMyRooms, user]);
+  }, [isAuthenticated, currentPage, showMyRooms, user]);
 
   const handleCreateRoom = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    if (!isAuthorized) {
+    if (!isAuthenticated) {
       setError('You must be logged in to create rooms.');
       return;
     }
@@ -71,11 +78,10 @@ function LandingPage() {
     }
     
     try {
-      const response = await axios.post<RoomData>(`${API_URL}/api/rooms`, { 
-        title,
-        creator: user?.name,
-        creator_email: user?.email
-      });
+      const response = await axios.post<RoomData>(`${API_URL}/api/rooms`, 
+        { title },
+        { withCredentials: true }
+      );
       const newRoom = response.data;
       navigate(`/room/${newRoom.room_id}`);
     } catch (err) {
@@ -102,10 +108,9 @@ function LandingPage() {
             <h1>Welcome to CodeCrush</h1>
             <p>Real-time collaborative code editor.</p>
           </div>
-          {isAuthenticated && (
+          {isAuthenticated && user && (
             <div className="user-info">
-              <img src={user?.picture} alt={user?.name} className="user-avatar" />
-              <span className="user-name">{user?.name}</span>
+              <span className="user-name">{user.name}</span>
               <button onClick={logout} className="logout-button">Logout</button>
             </div>
           )}
@@ -115,19 +120,16 @@ function LandingPage() {
       {!isAuthenticated && (
         <div className="auth-section">
           <h2>Login Required</h2>
-          <p>Please sign in with your Google account to view and create rooms.</p>
-          <GoogleOneTap 
-            onSuccess={() => setAuthError('')}
-            onError={(error) => setAuthError('Login failed. Please try again.')}
-          />
+          <p>Please sign in to view and create rooms.</p>
+          <button onClick={login} className="login-button">Login</button>
           {authError && <p className="error-message">{authError}</p>}
           <div className="guest-access">
             <p>Or <Link to="/join" className="guest-link">join an existing room as a guest</Link></p>
           </div>
         </div>
       )}
-
-      {isAuthorized && (
+      
+      {isAuthenticated && (
         <main>
         <div className="create-room-section">
           <h2>Create a New Room</h2>
@@ -214,17 +216,20 @@ function LandingPage() {
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <div className="App">
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/join" element={<GuestJoin />} />
-            <Route path="/room/:roomId" element={<Room />} />
-          </Routes>
-        </div>
-      </Router>
-    </AuthProvider>
+    <Router>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={
+            <>
+              <HandleRedirect />
+              <LandingPage />
+            </>
+          } />
+          <Route path="/room/:roomId" element={<Room />} />
+          <Route path="/join" element={<GuestJoin />} />
+        </Routes>
+      </AuthProvider>
+    </Router>
   );
 }
 

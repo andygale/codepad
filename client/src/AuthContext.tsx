@@ -1,18 +1,24 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { useMsal } from "@azure/msal-react";
+import { loginRequest } from "./authConfig";
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_API_URL || '';
 
 interface User {
+  id: string;
   email: string;
   name: string;
-  picture?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  isAuthorized: boolean;
-  login: (credential: string) => Promise<void>;
+  login: () => void;
   logout: () => void;
   loading: boolean;
+  fetchUser: () => Promise<void>;
+  initializeAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,57 +36,90 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const { instance, accounts } = useMsal();
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   const isAuthenticated = user !== null;
-  const isAuthorized = isAuthenticated; // Allow any authenticated user
 
-  useEffect(() => {
-    // Check for existing session
-    const savedUser = localStorage.getItem('auth_user');
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch (error) {
-        console.error('Error parsing saved user:', error);
-        localStorage.removeItem('auth_user');
-      }
+  const fetchUser = useCallback(async () => {
+    try {
+      const response = await axios.get<User>(`${API_URL}/api/auth/me`, {
+        withCredentials: true,
+      });
+      setUser(response.data);
+    } catch (error) {
+      setUser(null);
     }
-    setLoading(false);
   }, []);
 
-  const login = async (credential: string) => {
+  const initializeAuth = useCallback(async () => {
+    if (initialized) return;
+    
+    setLoading(true);
+    setInitialized(true);
+    
     try {
-      // Decode the JWT token to get user info
-      const payload = JSON.parse(atob(credential.split('.')[1]));
-      
-      const userData: User = {
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture,
-      };
-
-      setUser(userData);
-      localStorage.setItem('auth_user', JSON.stringify(userData));
+      // First try to get user from existing session
+      const response = await axios.get<User>(`${API_URL}/api/auth/me`, {
+        withCredentials: true,
+      });
+      setUser(response.data);
     } catch (error) {
-      console.error('Error during login:', error);
-      throw new Error('Login failed');
+      // If no backend session but we have MSAL accounts, try to get a token
+      if (accounts.length > 0) {
+        try {
+          const silentRequest = {
+            ...loginRequest,
+            account: accounts[0]
+          };
+          const response = await instance.acquireTokenSilent(silentRequest);
+          
+          // Send the token to backend to create session
+          await axios.post(`${API_URL}/api/auth/callback`, { token: response.idToken }, {
+            withCredentials: true
+          });
+          
+          // Try fetching user again
+          const userResponse = await axios.get<User>(`${API_URL}/api/auth/me`, {
+            withCredentials: true,
+          });
+          setUser(userResponse.data);
+        } catch (tokenError) {
+          console.error('Silent token acquisition failed:', tokenError);
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
+    } finally {
+      setLoading(false);
     }
+  }, [instance, accounts, initialized]);
+
+  const login = () => {
+    instance.loginRedirect(loginRequest).catch(e => {
+      console.error('MSAL loginRedirect error:', e);
+    });
   };
 
   const logout = () => {
+    instance.logoutRedirect({
+      postLogoutRedirectUri: "/",
+    });
+    axios.post(`${API_URL}/api/auth/logout`, {}, { withCredentials: true });
     setUser(null);
-    localStorage.removeItem('auth_user');
   };
 
   const value: AuthContextType = {
     user,
     isAuthenticated,
-    isAuthorized,
     login,
     logout,
     loading,
+    fetchUser,
+    initializeAuth,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

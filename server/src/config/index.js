@@ -1,11 +1,19 @@
-require('dotenv').config();
+// dotenv is already loaded in index.js
 
 const config = {
   port: process.env.PORT || 5000,
   pistonApiUrl: process.env.PISTON_API_URL || 'https://emkc.org/api/v2/piston/execute',
-  databaseUrl: process.env.DATABASE_URL || 'postgresql://agale@localhost:5432/codecrush',
+  databaseUrl: process.env.DATABASE_URL || 'postgresql://agale@localhost:5432/codepad',
   corsOrigin: process.env.CORS_ORIGIN || '*',
   nodeEnv: process.env.NODE_ENV || 'development',
+  
+  // Microsoft Authentication
+  microsoftClientId: process.env.MICROSOFT_CLIENT_ID || '7d539d3e-b9fa-4ec7-b8e9-ab88ec1db4af',
+  microsoftTenantId: process.env.MICROSOFT_TENANT_ID || 'cf3dc8a2-b7cc-4452-848f-cb570a56cfbf',
+  
+  // Session configuration
+  sessionSecret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+  trustProxy: process.env.TRUST_PROXY === 'true',
   
   // Language configurations
   languageVersions: {

@@ -3,27 +3,26 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { MsalProvider } from '@azure/msal-react';
+import { PublicClientApplication } from '@azure/msal-browser';
+import { msalConfig } from './authConfig';
 
-// Suppress ResizeObserver loop errors in development
-window.addEventListener('error', function (e) {
-  if (
-    e.message &&
-    (e.message.includes('ResizeObserver loop completed with undelivered notifications.') ||
-     e.message.includes('ResizeObserver loop limit exceeded'))
-  ) {
-    e.stopImmediatePropagation();
-    e.preventDefault();
-  }
+const msalInstance = new PublicClientApplication(msalConfig);
+
+msalInstance.initialize().then(() => {
+  const root = ReactDOM.createRoot(
+    document.getElementById('root') as HTMLElement
+  );
+  root.render(
+    <React.StrictMode>
+      <MsalProvider instance={msalInstance}>
+        <App />
+      </MsalProvider>
+    </React.StrictMode>
+  );
+}).catch((error) => {
+  console.error('MSAL initialization error:', error);
 });
-
-const root = ReactDOM.createRoot(
-  document.getElementById('root') as HTMLElement
-);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
 
 // If you want to start measuring performance in your app, pass a function
 // to log results (for example: reportWebVitals(console.log))

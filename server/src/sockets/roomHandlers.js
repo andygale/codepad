@@ -5,11 +5,17 @@ const RoomService = require('../services/roomService');
 const languageUpdateTimeouts = new Map();
 
 const setupRoomHandlers = (io, socket) => {
-  const joinRoom = async ({ roomId, user }) => {
+  // Check if user is authenticated, but don't require it for guests
+  const session = socket.request.session;
+  const user = session && session.user && session.user.isAuthenticated ? session.user : null;
+  const isAuthenticated = !!user;
+
+  const joinRoom = async ({ roomId, user: clientUser }) => {
     try {
       const room = await RoomService.getRoom(roomId);
       if (!room) {
-        console.log(`User ${user.id} (${user.name}) attempted to join non-existent room ${roomId}`);
+        const userInfo = isAuthenticated ? `${user.id} (${user.name})` : `Guest`;
+        console.log(`User ${userInfo} attempted to join non-existent room ${roomId}`);
         socket.emit('room_error', { message: `Room ${roomId} does not exist.` });
         return;
       }
@@ -20,14 +26,18 @@ const setupRoomHandlers = (io, socket) => {
         createdAt: room.created_at 
       });
 
-      console.log(`User ${user.id} (${user.name}) is joining room ${roomId}`);
+      // For guests, use the provided user info; for authenticated users, use session data
+      const userDisplayName = isAuthenticated ? user.name : (clientUser?.name || 'Guest');
+      const userId = isAuthenticated ? user.id : 'guest';
+
+      console.log(`User ${userId} (${userDisplayName}) is joining room ${roomId}`);
       socket.join(roomId);
       
       // Get or create room state (now async)
       const roomState = await roomService.getOrCreateRoom(roomId);
       
       // Add user to room
-      const users = roomService.addUserToRoom(roomId, socket.id, user.name);
+      const users = roomService.addUserToRoom(roomId, socket.id, userDisplayName);
       
       // Send current state to the new user
       socket.emit('codeUpdate', { code: roomState.code });
@@ -37,7 +47,7 @@ const setupRoomHandlers = (io, socket) => {
       // Broadcast user list to all users in room
       io.in(roomId).emit('userList', { users });
       
-      console.log(`User ${user.name} (${socket.id}) joined room ${roomId}. Language: ${roomState.language}`);
+      console.log(`User ${userDisplayName} (${socket.id}) joined room ${roomId}. Language: ${roomState.language}`);
     } catch (error) {
       console.error(`Error in joinRoom for ${roomId}:`, error);
       socket.emit('room_error', { message: 'Failed to join room. Please try again.' });

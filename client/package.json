@@ -4,6 +4,8 @@
   "private": true,
   "license": "ISC",
   "dependencies": {
+    "@azure/msal-browser": "^4.15.0",
+    "@azure/msal-react": "^3.0.15",
     "@google-cloud/local-auth": "^3.0.1",
     "@monaco-editor/react": "^4.7.0",
     "@testing-library/dom": "^10.4.0",
