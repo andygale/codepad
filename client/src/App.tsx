@@ -38,6 +38,7 @@ function LandingPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalRooms, setTotalRooms] = useState(0);
   const [restartingRooms, setRestartingRooms] = useState<Set<string>>(new Set());
+  const [pausingRooms, setPausingRooms] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
   const { user, isAuthenticated, login, logout, loading, initializeAuth } = useAuth(); // Updated to use new functions
   const ROOMS_PER_PAGE = 10;
@@ -119,6 +120,37 @@ function LandingPage() {
       setError('Failed to restart room. Please try again.');
     } finally {
       setRestartingRooms(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(roomId);
+        return newSet;
+      });
+    }
+  };
+
+  const handlePauseRoom = async (roomId: string, e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent navigation to room
+    e.stopPropagation();
+    
+    if (!user) return;
+    
+    setPausingRooms(prev => new Set([...Array.from(prev), roomId]));
+    
+    try {
+      await axios.post(`${API_URL}/api/rooms/${roomId}/pause`, {}, { withCredentials: true });
+      
+      // Update the room in the local state
+      setRooms(prevRooms => 
+        prevRooms.map(room => 
+          room.room_id === roomId 
+            ? { ...room, is_paused: true, paused_at: new Date().toISOString() }
+            : room
+        )
+      );
+    } catch (error) {
+      console.error('Error pausing room:', error);
+      setError('Failed to pause room. Please try again.');
+    } finally {
+      setPausingRooms(prev => {
         const newSet = new Set(prev);
         newSet.delete(roomId);
         return newSet;
@@ -275,24 +307,44 @@ function LandingPage() {
                         {new Date(room.created_at).toLocaleString()}
                       </td>
                       <td className="room-actions-cell">
-                        {room.is_paused && canManageRoom(room) && (
-                          <button
-                            className="restart-button"
-                            onClick={(e) => handleRestartRoom(room.room_id, e)}
-                            disabled={restartingRooms.has(room.room_id)}
-                            style={{
-                              backgroundColor: '#4CAF50',
-                              color: 'white',
-                              border: 'none',
-                              padding: '0.25rem 0.5rem',
-                              borderRadius: '4px',
-                              fontSize: '0.8rem',
-                              cursor: restartingRooms.has(room.room_id) ? 'not-allowed' : 'pointer',
-                              opacity: restartingRooms.has(room.room_id) ? 0.6 : 1
-                            }}
-                          >
-                            {restartingRooms.has(room.room_id) ? 'Restarting...' : 'Restart'}
-                          </button>
+                        {canManageRoom(room) && (
+                          room.is_paused ? (
+                            <button
+                              className="restart-button"
+                              onClick={(e) => handleRestartRoom(room.room_id, e)}
+                              disabled={restartingRooms.has(room.room_id)}
+                              style={{
+                                backgroundColor: '#4CAF50',
+                                color: 'white',
+                                border: 'none',
+                                padding: '0.25rem 0.5rem',
+                                borderRadius: '4px',
+                                fontSize: '0.8rem',
+                                cursor: restartingRooms.has(room.room_id) ? 'not-allowed' : 'pointer',
+                                opacity: restartingRooms.has(room.room_id) ? 0.6 : 1
+                              }}
+                            >
+                              {restartingRooms.has(room.room_id) ? 'Restarting...' : 'Restart'}
+                            </button>
+                          ) : (
+                            <button
+                              className="pause-button"
+                              onClick={(e) => handlePauseRoom(room.room_id, e)}
+                              disabled={pausingRooms.has(room.room_id)}
+                              style={{
+                                backgroundColor: '#ff6b6b',
+                                color: 'white',
+                                border: 'none',
+                                padding: '0.25rem 0.5rem',
+                                borderRadius: '4px',
+                                fontSize: '0.8rem',
+                                cursor: pausingRooms.has(room.room_id) ? 'not-allowed' : 'pointer',
+                                opacity: pausingRooms.has(room.room_id) ? 0.6 : 1
+                              }}
+                            >
+                              {pausingRooms.has(room.room_id) ? 'Pausing...' : 'Pause'}
+                            </button>
+                          )
                         )}
                       </td>
                     </tr>

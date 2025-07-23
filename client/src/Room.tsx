@@ -58,9 +58,7 @@ function Room() {
   const [roomTitle, setRoomTitle] = useState('');
   const [roomCreatedAt, setRoomCreatedAt] = useState('');
   const [isPaused, setIsPaused] = useState(false);
-  const [pausedAt, setPausedAt] = useState<string | null>(null);
-  const [lastActivityAt, setLastActivityAt] = useState<string | null>(null);
-  const [canManageRoom, setCanManageRoom] = useState(false);
+
   const [language, setLanguage] = useState('deno');
   const [code, setCode] = useState(`class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`);
   const [outputBlocks, setOutputBlocks] = useState<{ timestamp: string; output: string; execTimeMs?: number }[]>([]);
@@ -155,10 +153,7 @@ function Room() {
       try {
         const response = await axios.get(`${API_URL}/api/rooms/${roomId}`);
         
-        // Any authenticated user can manage rooms
-        if (isAuthenticated && user) {
-          setCanManageRoom(true);
-        }
+
         
         setRoomStatus('found');
       } catch (error) {
@@ -204,12 +199,6 @@ function Room() {
       setRoomCreatedAt(createdAt);
       if (roomIsPaused !== undefined) {
         setIsPaused(roomIsPaused);
-      }
-      if (roomPausedAt !== undefined) {
-        setPausedAt(roomPausedAt);
-      }
-      if (roomLastActivityAt !== undefined) {
-        setLastActivityAt(roomLastActivityAt);
       }
     });
 
@@ -550,31 +539,7 @@ function Room() {
     }
   };
 
-  const handlePauseRoom = () => {
-    if (!canManageRoom || !roomId) return;
-    
-    // Optimistically update UI
-    setIsPaused(true);
-    setPausedAt(new Date().toISOString());
-    
-    // Emit socket event to server (which updates DB and broadcasts)
-    if (socketRef.current) {
-      socketRef.current.emit('pauseRoom', { roomId });
-    }
-  };
 
-  const handleUnpauseRoom = () => {
-    if (!canManageRoom || !roomId) return;
-    
-    // Optimistically update UI
-    setIsPaused(false);
-    setPausedAt(null);
-    
-    // Emit socket event to server (which updates DB and broadcasts)
-    if (socketRef.current) {
-      socketRef.current.emit('unpauseRoom', { roomId });
-    }
-  };
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
     console.log('[Room] Editor mounted successfully');
@@ -834,26 +799,17 @@ function Room() {
                 </p>
               )}
             </div>
-            <button className="room-button" onClick={handleCopyUrl}>
-              Copy Room URL
-            </button>
+            {isAuthenticated && (
+              <button className="room-button" onClick={handleCopyUrl}>
+                Copy Room URL
+              </button>
+            )}
             {isAuthenticated && (
               <button className="room-button" onClick={() => setShowPlayback(true)}>
                 Playback
               </button>
             )}
-            {canManageRoom && (
-              <button 
-                className="room-button" 
-                onClick={isPaused ? handleUnpauseRoom : handlePauseRoom}
-                style={{ 
-                  backgroundColor: isPaused ? '#4CAF50' : '#ff6b6b',
-                  color: 'white'
-                }}
-              >
-                {isPaused ? 'Restart Room' : 'Pause Room'}
-              </button>
-            )}
+
             {copyMsg && <span style={{ color: '#0f0' }}>{copyMsg}</span>}
           </div>
 

@@ -457,6 +457,26 @@ main {
   opacity: 0.6 !important;
 }
 
+.pause-button {
+  background-color: #ff6b6b !important;
+  color: white !important;
+  border: none !important;
+  padding: 0.25rem 0.5rem !important;
+  border-radius: 4px !important;
+  font-size: 0.8rem !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s ease !important;
+}
+
+.pause-button:hover:not(:disabled) {
+  background-color: #ff5252 !important;
+}
+
+.pause-button:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+}
+
 /* Update room table to accommodate new columns */
 .room-table th:nth-child(3),
 .room-table td:nth-child(3) {
