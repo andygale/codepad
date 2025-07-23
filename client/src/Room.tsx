@@ -34,33 +34,39 @@ type ServerEvents = {
   userList: (data: { users: {id: string, name: string}[] }) => void;
   outputHistory: (data: { outputHistory: { timestamp: string; output: string }[] }) => void;
   room_error: (data: { message: string }) => void;
-  room_details: (data: { title: string; createdAt: string }) => void;
+  room_details: (data: { title: string; createdAt: string; isPaused?: boolean; pausedAt?: string; lastActivityAt?: string }) => void;
+  roomPauseStatus: (data: { isPaused: boolean }) => void;
 };
 
 type ClientEvents = {
-  codeUpdate: (data: { code: string; room: string; changeInfo?: any }) => void;
-  codeDelta: (data: { operations: any[]; room: string; codeSnapshot: string }) => void;
+  joinRoom: (data: { roomId: string; user: { id: string; name: string } }) => void;
   saveCode: (data: { room: string; code: string }) => void;
-  languageUpdate: (data: { language: string; code?: string; room: string }) => void;
-  joinRoom: (data: { roomId: string; user: { id: string, name: string } }) => void;
-  runOutput: (data: { output: string; room: string; execTimeMs?: number }) => void;
-  clearOutput: (data: { room: string }) => void;
+  codeDelta: (data: { operations: any[]; room: string; codeSnapshot?: string }) => void;
+  languageUpdate: (data: { language: string; code: string; room: string }) => void;
   cursorChange: (data: { room: string; position: any }) => void;
   selectionChange: (data: { room: string; selection: any }) => void;
+  runOutput: (data: { output: string; execTimeMs?: number; room: string }) => void;
+  clearOutput: (data: { room: string }) => void;
+  pauseRoom: (data: { roomId: string }) => void;
+  unpauseRoom: (data: { roomId: string }) => void;
 };
 
 function Room() {
   const { roomId } = useParams();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, loading, initializeAuth } = useAuth();
   const [roomStatus, setRoomStatus] = useState<'loading' | 'found' | 'not_found'>('loading');
   const [roomTitle, setRoomTitle] = useState('');
   const [roomCreatedAt, setRoomCreatedAt] = useState('');
+  const [isPaused, setIsPaused] = useState(false);
+  const [pausedAt, setPausedAt] = useState<string | null>(null);
+  const [lastActivityAt, setLastActivityAt] = useState<string | null>(null);
+  const [canManageRoom, setCanManageRoom] = useState(false);
   const [language, setLanguage] = useState('deno');
   const [code, setCode] = useState(`class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`);
   const [outputBlocks, setOutputBlocks] = useState<{ timestamp: string; output: string; execTimeMs?: number }[]>([]);
   const [users, setUsers] = useState<{id: string, name: string}[]>([]);
   const [name, setName] = useState('');
-  const [namePrompt, setNamePrompt] = useState(true);
+  const [namePrompt, setNamePrompt] = useState(false); // Start with false, will be set based on auth state
   const [isRunning, setIsRunning] = useState(false);
   const socketRef = useRef<Socket<ServerEvents, ClientEvents> | null>(null);
   const editorRef = useRef<any>(null);
@@ -105,54 +111,40 @@ function Room() {
     deno: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n    console.log('Running Deno version:', Deno.version.deno);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
     python: `import sys\n\nclass Greeter:\n    def __init__(self, message):\n        self.message = message\n    def greet(self):\n        print(self.message)\n        print(f'Running Python {sys.version}')\n\ngreeter = Greeter('Hello, world!')\ngreeter.greet()`,
     cpp: `#include <iostream>\n\nint main() {\n    std::cout << "Hello, world!" << std::endl;\n    std::cout << "Running C++ with GCC " << __GNUC__ << "." << __GNUC_MINOR__ << "." << __GNUC_PATCHLEVEL__ << std::endl;\n    return 0;\n}`,
-    java: `public class Greeter {\n    private String message;\n    public Greeter(String message) {\n        this.message = message;\n    }\n    public void greet() {\n        System.out.println(message);\n        System.out.println("Running Java version: " + System.getProperty("java.version"));\n    }\n    public static void main(String[] args) {\n        Greeter greeter = new Greeter("Hello, world!");\n        greeter.greet();\n    }\n}`,
-    html: `<!DOCTYPE html>
-<html>
-<head>
-  <title>Web Example</title>
-  <style>
-    body { font-family: sans-serif; background: #f9f9f9; color: #222; }
-    .greeting { color: #007acc; font-size: 2em; margin-top: 2em; }
-    #time { font-size: 1em; color: #555; margin-top: 1em; }
-  </style>
-</head>
-<body>
-  <div class="greeting">Hello, world!</div>
-  <div id="time"></div>
-  <script>
-    document.querySelector('.greeting').textContent += ' (from JavaScript!)';
-    document.getElementById('time').textContent = 'Rendered at: ' + new Date().toLocaleString();
-  </script>
-</body>
-</html>`,
-    swift: `func greet(name: String) {\n    print("Hello, \\(name)!")\n    \n    #if swift(>=5.3)\n    print("Running Swift 5.3 or later")\n    #elseif swift(>=5.0)\n    print("Running Swift 5.0-5.2")\n    #else\n    print("Running Swift < 5.0")\n    #endif\n}\n\ngreet(name: "world")`,
-    kotlin: `fun main() {\n    println("Hello, world!")\n    println("Running Kotlin \${kotlin.KotlinVersion.CURRENT}")\n}`,
-    plaintext: ''
+    java: `public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, world!");\n        System.out.println("Running Java " + System.getProperty("java.version"));\n    }\n}`,
+    swift: `print("Hello, world!")\nprint("Running Swift")`,
+    kotlin: `fun main() {\n    println("Hello, world!")\n    println("Running Kotlin \${KotlinVersion.CURRENT}")\n}`,
+    html: `<!DOCTYPE html>\n<html>\n<head>\n    <title>Hello World</title>\n</head>\n<body>\n    <h1>Hello, world!</h1>\n    <p>This is a basic HTML page.</p>\n</body>\n</html>`,
+    plaintext: 'This is plain text. You can write anything here, but it cannot be executed.'
   };
 
-  const getUserColor = useCallback((userId: string) => {
-      const userColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#F7D842', '#8A2BE2', '#FF8C00', '#00CED1'];
-      let hash = 0;
-      for (let i = 0; i < userId.length; i++) {
-          hash = userId.charCodeAt(i) + ((hash << 5) - hash);
-      }
-      const index = Math.abs(hash % userColors.length);
-      return userColors[index];
-  }, []);
+  const getIsRunDisabled = () => {
+    return isRunning || language === 'plaintext' || isPaused;
+  };
 
-  
-
-  
-
-  // Set name automatically for authenticated users
+  // Handle authentication state and name prompt logic
   useEffect(() => {
+    if (loading) {
+      // Still loading auth, don't show name prompt yet
+      setNamePrompt(false);
+      return;
+    }
+
     if (isAuthenticated && user) {
-      // Extract first name from full name
+      // User is authenticated, set name automatically and hide prompt
       const firstName = user.name.split(' ')[0];
       setName(firstName);
       setNamePrompt(false);
+    } else {
+      // User is not authenticated, show name prompt for guest access
+      setNamePrompt(true);
     }
-  }, [isAuthenticated, user]);
+  }, [loading, isAuthenticated, user]);
+
+  // Initialize authentication when component mounts (handles direct room URLs)
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
 
   useEffect(() => {
     const checkRoomExists = async () => {
@@ -161,14 +153,20 @@ function Room() {
         return;
       }
       try {
-        await axios.get(`${API_URL}/api/rooms/${roomId}`);
+        const response = await axios.get(`${API_URL}/api/rooms/${roomId}`);
+        
+        // Any authenticated user can manage rooms
+        if (isAuthenticated && user) {
+          setCanManageRoom(true);
+        }
+        
         setRoomStatus('found');
       } catch (error) {
         setRoomStatus('not_found');
       }
     };
     checkRoomExists();
-  }, [roomId]);
+  }, [roomId, isAuthenticated, user]);
 
   useEffect(() => {
     // Only establish connection after the user has submitted their name
@@ -196,12 +194,32 @@ function Room() {
 
     socket.on('room_error', ({ message }) => {
       console.error(`Room Error: ${message}`);
-      setRoomStatus('not_found');
+      if (message.includes('does not exist')) {
+        setRoomStatus('not_found');
+      }
     });
 
-    socket.on('room_details', ({ title, createdAt }) => {
+    socket.on('room_details', ({ title, createdAt, isPaused: roomIsPaused, pausedAt: roomPausedAt, lastActivityAt: roomLastActivityAt }) => {
       setRoomTitle(title);
       setRoomCreatedAt(createdAt);
+      if (roomIsPaused !== undefined) {
+        setIsPaused(roomIsPaused);
+      }
+      if (roomPausedAt !== undefined) {
+        setPausedAt(roomPausedAt);
+      }
+      if (roomLastActivityAt !== undefined) {
+        setLastActivityAt(roomLastActivityAt);
+      }
+    });
+
+    socket.on('roomPauseStatus', ({ isPaused: roomIsPaused }) => {
+      setIsPaused(roomIsPaused);
+      
+      // Update editor read-only status
+      if (editorRef.current) {
+        editorRef.current.updateOptions({ readOnly: roomIsPaused });
+      }
     });
 
     socket.on('codeUpdate', ({ code }) => {
@@ -342,87 +360,68 @@ function Room() {
     });
   }, [roomId, editorReady]);
 
-  const initializeLSP = useCallback(() => {
-        // Don't initialize if LSP is disabled
-        if (!lspEnabled) {
-            console.log(`[Room] LSP is disabled by user`);
-            if (lspClientRef.current) {
-                lspClientRef.current.disconnect();
-                lspClientRef.current = null;
-                setLspStatus('disconnected');
-            }
-            return;
+  const initializeLSP = useCallback(async () => {
+    if (!editorRef.current || !socketRef.current || !roomId || !editorReady || !lspEnabled) {
+      console.log('[Room] LSP initialization skipped - missing dependencies');
+      return;
+    }
+
+    // Only enable LSP for supported languages
+    if (!['kotlin', 'java', 'python'].includes(language)) {
+      console.log(`[Room] LSP not supported for language: ${language}`);
+      setLspStatus('disconnected');
+      return;
+    }
+
+    try {
+      // Clean up existing connection
+      if (lspClientRef.current) {
+        lspClientRef.current.disconnect();
+        lspClientRef.current = null;
+      }
+
+      console.log(`[Room] Initializing LSP for language: ${language}, room: ${roomId}`);
+
+      lspClientRef.current = new LSPClient(
+        socketRef.current,
+        editorRef.current,
+        language,
+        roomId,
+        () => {
+          console.log('[Room] LSP Connected');
+          setLspStatus('connected');
+        },
+        () => {
+          console.log('[Room] LSP Disconnected');
+          setLspStatus('disconnected');
+        },
+        monacoRef.current
+      );
+
+      // Connect to LSP server with retry logic
+      const connectWithRetry = async (retries: number) => {
+        try {
+          setLspStatus('connecting');
+          await lspClientRef.current?.connect();
+        } catch (error) {
+          console.error(`[Room] LSP connection failed:`, error);
+          if (retries > 0) {
+            console.log(`[Room] Retrying LSP connection... (${retries} retries left)`);
+            setTimeout(() => connectWithRetry(retries - 1), 5000);
+          } else {
+            console.error('[Room] LSP connection failed after multiple retries.');
+            setLspStatus('error');
+          }
         }
-        
-        if (!editorRef.current || !socketRef.current || !roomId || !editorReady) {
-            console.log(`[Room] Missing requirements - editor: ${!!editorRef.current}, socket: ${!!socketRef.current}, roomId: ${roomId}, editorReady: ${editorReady}`);
-            return;
-        }
+      };
 
-        const supportedLanguages = ['kotlin', 'java', 'python'];
-        if (!supportedLanguages.includes(language)) {
-            console.log(`[Room] Language ${language} not supported for LSP.`);
-            if (lspClientRef.current) {
-                lspClientRef.current.disconnect();
-                lspClientRef.current = null;
-            }
-            return;
-        }
+      connectWithRetry(3);
 
-        // Ensure Monaco model language matches before initializing LSP
-        if (monacoRef.current && editorRef.current) {
-            try {
-                monacoRef.current.editor.setModelLanguage(editorRef.current.getModel(), language);
-            } catch (err) {
-                console.error('Failed to set Monaco model language:', err);
-            }
-        }
-
-        console.log(`[Room] Starting LSP initialization for ${language}`);
-
-        // Disconnect previous client if it exists
-        if (lspClientRef.current) {
-            lspClientRef.current.disconnect();
-        }
-
-        // Create new LSP client
-        console.log(`[Room] Creating new LSP client for ${language}`);
-        lspClientRef.current = new LSPClient(
-            socketRef.current,
-            editorRef.current,
-            language,
-            roomId,
-            () => {
-              console.log('[Room] LSP Connected');
-              setLspStatus('connected');
-            },
-            () => {
-              console.log('[Room] LSP Disconnected');
-              setLspStatus('disconnected');
-            },
-            monacoRef.current
-        );
-
-        // Connect to LSP server with retry logic
-        const connectWithRetry = async (retries: number) => {
-            try {
-                setLspStatus('connecting');
-                await lspClientRef.current?.connect();
-            } catch (error) {
-                console.error(`[Room] LSP connection failed:`, error);
-                if (retries > 0) {
-                    console.log(`[Room] Retrying LSP connection... (${retries} retries left)`);
-                    setTimeout(() => connectWithRetry(retries - 1), 5000);
-                } else {
-                    console.error('[Room] LSP connection failed after multiple retries.');
-                    setLspStatus('error');
-                }
-            }
-        };
-
-        connectWithRetry(3);
-
-    }, [language, roomId, editorReady, lspEnabled]);
+    } catch (error) {
+      console.error('[Room] LSP initialization error:', error);
+      setLspStatus('error');
+    }
+  }, [language, roomId, editorReady, lspEnabled]);
 
   useEffect(() => {
     console.log(`[Room] useEffect triggered for LSP initialization - language: ${language}, roomId: ${roomId}, editor: ${!!editorRef.current}, socket: ${!!socketRef.current}, editorReady: ${editorReady}`);
@@ -463,6 +462,10 @@ function Room() {
   }, [language]);
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (isPaused) {
+      return; // Prevent language changes when paused
+    }
+    
     const newLang = e.target.value;
     
     // For now, let's use a simple approach: just use the new language example
@@ -487,6 +490,10 @@ function Room() {
   };
 
   const handleRun = async () => {
+    if (isPaused) {
+      return; // Prevent execution when paused
+    }
+    
     setIsRunning(true);
     try {
       // Get the current code directly from the editor
@@ -503,6 +510,7 @@ function Room() {
       const res = await axios.post('/api/execute', {
         code: currentCode,
         language,
+        roomId, // Include roomId for pause checking
       });
       if (socketRef.current && roomId) {
         socketRef.current.emit('runOutput', { output: res.data.output, execTimeMs: res.data.execTimeMs, room: roomId });
@@ -542,11 +550,40 @@ function Room() {
     }
   };
 
+  const handlePauseRoom = () => {
+    if (!canManageRoom || !roomId) return;
+    
+    // Optimistically update UI
+    setIsPaused(true);
+    setPausedAt(new Date().toISOString());
+    
+    // Emit socket event to server (which updates DB and broadcasts)
+    if (socketRef.current) {
+      socketRef.current.emit('pauseRoom', { roomId });
+    }
+  };
+
+  const handleUnpauseRoom = () => {
+    if (!canManageRoom || !roomId) return;
+    
+    // Optimistically update UI
+    setIsPaused(false);
+    setPausedAt(null);
+    
+    // Emit socket event to server (which updates DB and broadcasts)
+    if (socketRef.current) {
+      socketRef.current.emit('unpauseRoom', { roomId });
+    }
+  };
+
   const handleEditorDidMount = (editor: any, monaco: any) => {
     console.log('[Room] Editor mounted successfully');
     editorRef.current = editor;
     monacoRef.current = monaco;
     decorationsCollectionRef.current = editor.createDecorationsCollection();
+    
+    // Set read-only based on pause status
+    editor.updateOptions({ readOnly: isPaused });
     
     // Disable built-in validation for all languages to rely on LSP only
     try {
@@ -582,7 +619,7 @@ function Room() {
 
     // Main content change handler
     editor.onDidChangeModelContent((event: any) => {
-      if (isRemoteUpdate.current) {
+      if (isRemoteUpdate.current || isPaused) {
         return;
       }
       if (socketRef.current && roomId) {
@@ -629,55 +666,71 @@ function Room() {
     });
   }
 
+  // Update editor read-only status when pause state changes
   useEffect(() => {
-    if (!editorRef.current || !monacoRef.current) return;
-
-    const userStyles = users.map(user => {
-      const color = getUserColor(user.id);
-      return `
-        .remote-selection-${user.id} {
-            background-color: ${color}4D;
-        }
-        .remote-cursor-${user.id} {
-            border-left: 2px solid ${color};
-            position: relative;
-        }
-        .remote-cursor-${user.id}:hover::after,
-        .remote-cursor-${user.id}.show-label::after {
-            content: '${user.name}';
-            background-color: ${color};
-            color: white;
-            position: absolute;
-            padding: 1px 4px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: 500;
-            transform: translateY(-100%) translateX(-50%);
-            white-space: nowrap;
-            z-index: 1000;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            animation: fadeInLabel 0.2s ease-in;
-            pointer-events: none;
-            left: 50%;
-            top: -2px;
-        }
-        .editor-container:hover .remote-cursor-${user.id}::after {
-            opacity: 0.8;
-        }
-        @keyframes fadeInLabel {
-            from { opacity: 0; transform: translateY(-100%) translateX(-50%) scale(0.8); }
-            to { opacity: 1; transform: translateY(-100%) translateX(-50%) scale(1); }
-        }
-    `;
-    }).join('\n');
-
-    let styleTag = document.getElementById('remote-user-styles');
-    if (!styleTag) {
-        styleTag = document.createElement('style');
-        styleTag.id = 'remote-user-styles';
-        document.head.appendChild(styleTag);
+    if (editorRef.current) {
+      editorRef.current.updateOptions({ readOnly: isPaused });
     }
-    styleTag.innerHTML = userStyles;
+  }, [isPaused]);
+
+  const getUserColor = useCallback((socketId: string) => {
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
+    const users = usersRef.current;
+    const userIndex = users.findIndex(u => u.id === socketId);
+    return colors[userIndex % colors.length];
+  }, []);
+
+  useEffect(() => {
+    if (!monacoRef.current) return;
+
+    // Create CSS for user-specific cursor colors
+    const style = document.getElementById('remote-cursor-styles') || document.createElement('style');
+    style.id = 'remote-cursor-styles';
+    
+    let cssContent = '';
+    users.forEach((user, index) => {
+      const color = getUserColor(user.id);
+      cssContent += `
+        .remote-cursor-${user.id}::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -1px;
+          width: 2px;
+          height: 20px;
+          background-color: ${color};
+          animation: cursor-blink 1s infinite;
+        }
+        .remote-cursor-${user.id}.show-label::before {
+          content: '${user.name}';
+          position: absolute;
+          top: -20px;
+          left: -1px;
+          background-color: ${color};
+          color: white;
+          padding: 2px 4px;
+          border-radius: 3px;
+          font-size: 11px;
+          white-space: nowrap;
+          z-index: 1000;
+        }
+        .remote-selection-${user.id} {
+          background-color: ${color}33 !important;
+        }
+      `;
+    });
+
+    cssContent += `
+      @keyframes cursor-blink {
+        0%, 50% { opacity: 1; }
+        51%, 100% { opacity: 0; }
+      }
+    `;
+
+    style.textContent = cssContent;
+    if (!document.head.contains(style)) {
+      document.head.appendChild(style);
+    }
 
     const newDecorations = Object.entries(remoteSelections).map(([id, { selection }]) => {
         const isCursor = selection.startLineNumber === selection.endLineNumber && selection.startColumn === selection.endColumn;
@@ -701,7 +754,7 @@ function Room() {
     });
   };
 
-  if (roomStatus === 'loading') {
+  if (roomStatus === 'loading' || loading) {
     return (
       <div className="App">
         <header className="App-header">
@@ -759,10 +812,27 @@ function Room() {
               </Link>
             )}
             <div>
-              <h1 style={{ margin: 0, fontSize: '1.5em' }}>{roomTitle}</h1>
-              <p style={{ margin: 0, fontSize: '0.8em', color: '#aaa' }}>
-                Created: {roomCreatedAt ? new Date(roomCreatedAt).toLocaleString() : '...'}
-              </p>
+              <h1 style={{ margin: 0, fontSize: '1.5em' }}>
+                {roomTitle}
+                {isPaused && (
+                  <span style={{ 
+                    marginLeft: '0.5rem', 
+                    fontSize: '0.7em', 
+                    color: '#ff6b6b', 
+                    background: '#33223a', 
+                    padding: '0.2rem 0.5rem', 
+                    borderRadius: '4px',
+                    border: '1px solid #ff6b6b'
+                  }}>
+                    PAUSED
+                  </span>
+                )}
+              </h1>
+              {isPaused && (
+                <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.8em', color: '#ff6b6b' }}>
+                  This room is paused. Code editing and execution are disabled.
+                </p>
+              )}
             </div>
             <button className="room-button" onClick={handleCopyUrl}>
               Copy Room URL
@@ -770,6 +840,18 @@ function Room() {
             {isAuthenticated && (
               <button className="room-button" onClick={() => setShowPlayback(true)}>
                 Playback
+              </button>
+            )}
+            {canManageRoom && (
+              <button 
+                className="room-button" 
+                onClick={isPaused ? handleUnpauseRoom : handlePauseRoom}
+                style={{ 
+                  backgroundColor: isPaused ? '#4CAF50' : '#ff6b6b',
+                  color: 'white'
+                }}
+              >
+                {isPaused ? 'Restart Room' : 'Pause Room'}
               </button>
             )}
             {copyMsg && <span style={{ color: '#0f0' }}>{copyMsg}</span>}
@@ -781,6 +863,7 @@ function Room() {
                 value={language}
                 onChange={handleLanguageChange}
                 style={{ fontSize: 16, padding: 4 }}
+                disabled={isPaused}
               >
                 {languages.map(lang => (
                   <option key={lang.value} value={lang.value}>{lang.label}</option>
@@ -822,10 +905,11 @@ function Room() {
             </div>
             <button 
               onClick={handleRun} 
-              disabled={isRunning || language === 'plaintext'} 
+              disabled={getIsRunDisabled()} 
               className="room-button"
+              style={isPaused ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
             >
-              {isRunning ? 'Running...' : 'Run'}
+              {isRunning ? 'Running...' : isPaused ? 'Run (Paused)' : 'Run'}
             </button>
             
             {isAuthenticated && user ? (
@@ -849,6 +933,11 @@ function Room() {
             <div className="editor-container">
               <div style={{ marginBottom: 12, textAlign: 'left', color: '#aaa', fontSize: 14 }}>
                 <strong>Users in room:</strong> {users.map((u: { id: string, name: string }) => u.name).join(', ')}
+                {isPaused && (
+                  <span style={{ marginLeft: '1rem', color: '#ff6b6b', fontSize: 12 }}>
+                    (Room is paused)
+                  </span>
+                )}
               </div>
               <MonacoEditor
                 height="100%"
@@ -856,31 +945,31 @@ function Room() {
                 theme="vs-dark"
                 value={code}
                 onMount={handleEditorDidMount}
-                options={{ minimap: { enabled: false } }}
+                options={{ minimap: { enabled: false }, readOnly: isPaused }}
               />
             </div>
             <div className="output-container">
-              <div className="output-header" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <h2 style={{ margin: 0 }}>Output</h2>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.9em' }}>
-                  <input
-                    type="checkbox"
-                    checked={wrapOutput}
-                    onChange={(e) => setWrapOutput(e.target.checked)}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  Wrap lines
-                </label>
-                <button onClick={handleClearOutput} className="clear-button">
-                  Clear
-                </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ margin: 0, color: '#aaa' }}>Output</h3>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <label style={{ fontSize: '12px', color: '#aaa', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={wrapOutput}
+                      onChange={(e) => setWrapOutput(e.target.checked)}
+                      style={{ marginRight: '4px' }}
+                    />
+                    Wrap lines
+                  </label>
+                  <button onClick={handleClearOutput} className="room-button">Clear Output</button>
+                </div>
               </div>
-              {language === 'html' ? (
+              {language === 'html' && iframeHtml ? (
                 <iframe
-                  key={htmlRunKey} // Add key to force re-render
-                  title="Web Output"
+                  key={htmlRunKey}
                   srcDoc={iframeHtml}
-                  style={{ width: '100%', height: '100%', border: '1px solid #444', background: '#fff', borderRadius: 6 }}
+                  style={{ width: '100%', height: '300px', border: '1px solid #333', backgroundColor: 'white' }}
+                  title="HTML Output"
                 />
               ) : (
                 <div className="output-box">

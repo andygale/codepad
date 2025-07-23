@@ -24,6 +24,9 @@ interface RoomData {
   creator: string;
   creator_email?: string;
   created_at: string;
+  is_paused?: boolean;
+  paused_at?: string;
+  last_activity_at?: string;
 }
 
 function LandingPage() {
@@ -34,6 +37,7 @@ function LandingPage() {
   const [showMyRooms, setShowMyRooms] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalRooms, setTotalRooms] = useState(0);
+  const [restartingRooms, setRestartingRooms] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
   const { user, isAuthenticated, login, logout, loading, initializeAuth } = useAuth(); // Updated to use new functions
   const ROOMS_PER_PAGE = 10;
@@ -88,6 +92,57 @@ function LandingPage() {
     } catch (err) {
       console.error('Error creating room:', err);
       setError('Could not create room. Please try again.');
+    }
+  };
+
+  const handleRestartRoom = async (roomId: string, e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent navigation to room
+    e.stopPropagation();
+    
+    if (!user) return;
+    
+    setRestartingRooms(prev => new Set([...Array.from(prev), roomId]));
+    
+    try {
+      await axios.post(`${API_URL}/api/rooms/${roomId}/unpause`, {}, { withCredentials: true });
+      
+      // Update the room in the local state
+      setRooms(prevRooms => 
+        prevRooms.map(room => 
+          room.room_id === roomId 
+            ? { ...room, is_paused: false, paused_at: undefined }
+            : room
+        )
+      );
+    } catch (error) {
+      console.error('Error restarting room:', error);
+      setError('Failed to restart room. Please try again.');
+    } finally {
+      setRestartingRooms(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(roomId);
+        return newSet;
+      });
+    }
+  };
+
+  const canManageRoom = (room: RoomData) => {
+    return isAuthenticated && user;
+  };
+
+  const getTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffDays > 0) {
+      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    } else if (diffHours > 0) {
+      return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    } else {
+      return 'Less than 1 hour ago';
     }
   };
 
@@ -176,7 +231,9 @@ function LandingPage() {
                   <tr>
                     <th>Room Title</th>
                     <th>Creator</th>
+                    <th>Status</th>
                     <th>Created</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -193,8 +250,50 @@ function LandingPage() {
                         {room.creator}
                         {room.creator_email && <div className="creator-email">{room.creator_email}</div>}
                       </td>
+                      <td className="room-status-cell">
+                        {room.is_paused ? (
+                          <span className="status-paused">
+                            Paused
+                            {room.paused_at && (
+                              <div className="status-detail">
+                                {getTimeAgo(room.paused_at)}
+                              </div>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="status-active">
+                            Active
+                            {room.last_activity_at && (
+                              <div className="status-detail">
+                                Last activity: {getTimeAgo(room.last_activity_at)}
+                              </div>
+                            )}
+                          </span>
+                        )}
+                      </td>
                       <td className="room-date-cell">
                         {new Date(room.created_at).toLocaleString()}
+                      </td>
+                      <td className="room-actions-cell">
+                        {room.is_paused && canManageRoom(room) && (
+                          <button
+                            className="restart-button"
+                            onClick={(e) => handleRestartRoom(room.room_id, e)}
+                            disabled={restartingRooms.has(room.room_id)}
+                            style={{
+                              backgroundColor: '#4CAF50',
+                              color: 'white',
+                              border: 'none',
+                              padding: '0.25rem 0.5rem',
+                              borderRadius: '4px',
+                              fontSize: '0.8rem',
+                              cursor: restartingRooms.has(room.room_id) ? 'not-allowed' : 'pointer',
+                              opacity: restartingRooms.has(room.room_id) ? 0.6 : 1
+                            }}
+                          >
+                            {restartingRooms.has(room.room_id) ? 'Restarting...' : 'Restart'}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

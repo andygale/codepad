@@ -43,13 +43,74 @@ router.post('/rooms', requireAuth, async (req, res) => {
   }
 });
 
+// Pause a room (authenticated users only)
+router.post('/rooms/:roomId/pause', requireAuth, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    
+    // Get room to check if it exists
+    const room = await roomService.getRoom(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+    
+    if (room.is_paused) {
+      return res.status(400).json({ error: 'Room is already paused' });
+    }
+    
+    await roomService.pauseRoom(roomId);
+    res.json({ message: 'Room paused successfully' });
+  } catch (error) {
+    console.error('Error pausing room:', error);
+    res.status(500).json({ error: 'Failed to pause room' });
+  }
+});
+
+// Unpause/restart a room (authenticated users only)
+router.post('/rooms/:roomId/unpause', requireAuth, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    
+    // Get room to check if it exists
+    const room = await roomService.getRoom(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+    
+    if (!room.is_paused) {
+      return res.status(400).json({ error: 'Room is not paused' });
+    }
+    
+    await roomService.unpauseRoom(roomId);
+    res.json({ message: 'Room restarted successfully' });
+  } catch (error) {
+    console.error('Error unpausing room:', error);
+    res.status(500).json({ error: 'Failed to restart room' });
+  }
+});
+
 router.post('/execute', async (req, res) => {
-  const { code, language } = req.body;
+  const { code, language, roomId } = req.body;
 
   if (!code || !language) {
     return res.status(400).json({ 
       error: 'Missing required fields: code and language' 
     });
+  }
+
+  // Check if room is paused (if roomId is provided)
+  if (roomId) {
+    try {
+      const isPaused = await roomService.checkRoomPauseStatus(roomId);
+      if (isPaused) {
+        return res.status(403).json({
+          error: 'Room is paused. Code execution is not allowed.'
+        });
+      }
+    } catch (error) {
+      console.error('Error checking room pause status:', error);
+      // Continue with execution if we can't check pause status
+    }
   }
 
   const result = await codeExecutionService.executeCode(code, language);
@@ -69,14 +130,15 @@ router.post('/execute', async (req, res) => {
   }
 });
 
-router.get('/rooms/:roomId/history', async (req,res)=>{
-  try{
-    const {roomId}=req.params;
-    const history=await roomService.getHistory(roomId);
+// Playback history endpoint
+router.get('/rooms/:roomId/history', requireAuth, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const history = await roomService.getPlaybackHistory(roomId);
     res.json(history);
-  }catch(err){
-    console.error('history error',err);
-    res.status(500).json({error:'Failed to fetch history'});
+  } catch (error) {
+    console.error('Error getting playback history:', error);
+    res.status(500).json({ error: 'Failed to get playback history' });
   }
 });
 

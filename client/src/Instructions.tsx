@@ -42,14 +42,33 @@ const Instructions: React.FC = () => {
       
       <div className="instructions-page">
         <p>This app provides a shared editor that can be used for coding interviews.</p>
+        
+        <h3>Getting Started</h3>
         <ul>
           <li>Create a new room for an interview</li>
           <li>Share the room URL with the candidate</li>
           <li>Change the coding language as needed</li>
           <li>Run the code as many times as you like</li>
+          <li>Use the playback feature to review the session</li>
         </ul>
-        <p>Candidates do not need to log in if they have a direct link to the room.</p>
-        <p>Rooms will pause after 24 hours (no more edits or execution), but can be unpaused.</p>
+
+        <h3>Room Management</h3>
+        <ul>
+          <li><strong>Auto-pause:</strong> Rooms automatically pause after 24 hours of inactivity to prevent abuse</li>
+          <li><strong>Manual pause:</strong> Any logged-in user can pause/restart rooms at any time</li>
+          <li><strong>Paused rooms:</strong> When paused, code editing and execution are disabled</li>
+          <li><strong>Restart:</strong> Any logged-in user can restart paused rooms from the homepage</li>
+        </ul>
+
+        <h3>Guest Access</h3>
+        <p>Candidates do not need to log in if they have a direct link to the room. They can join as guests and participate in the session.</p>
+        
+        <h3>Security Features</h3>
+        <ul>
+          <li>Rooms pause automatically after 24 hours to limit exposure to potential attacks</li>
+          <li>Any authenticated user can restart paused rooms (authentication required)</li>
+          <li>All code execution is sandboxed through the Piston API</li>
+        </ul>
       </div>
     </div>
   );

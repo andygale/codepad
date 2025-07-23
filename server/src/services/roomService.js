@@ -7,6 +7,8 @@ class RoomService {
   constructor() {
     this.roomState = {};
     this.userNames = {};
+    // Start auto-pause scheduler
+    this.startAutoPauseScheduler();
   }
 
   async createRoom(title, creator, creator_email) {
@@ -28,7 +30,7 @@ greeter.greet();`;
     
     try {
       const result = await db.query(
-        'INSERT INTO rooms (room_id, title, creator, creator_email, code, language) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        'INSERT INTO rooms (room_id, title, creator, creator_email, code, language, last_activity_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *',
         [roomId, title, creator, creator_email, defaultCode, defaultLanguage]
       );
       return result.rows[0];
@@ -86,7 +88,10 @@ greeter.greet();`;
         this.roomState[roomId] = {
           code: dbRoom.code,
           language: dbRoom.language,
-          outputHistory: []
+          outputHistory: [],
+          isPaused: dbRoom.is_paused,
+          lastActivityAt: dbRoom.last_activity_at,
+          pausedAt: dbRoom.paused_at
         };
       }
       return this.roomState[roomId];
@@ -97,16 +102,38 @@ greeter.greet();`;
       this.roomState[roomId] = {
         code: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n    console.log('Running Deno version:', Deno.version.deno);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
         language: 'deno',
-        outputHistory: []
+        outputHistory: [],
+        isPaused: false,
+        lastActivityAt: new Date(),
+        pausedAt: null
       };
     }
     return this.roomState[roomId];
   }
 
+  async updateRoomActivity(roomId) {
+    try {
+      await db.query('UPDATE rooms SET last_activity_at = NOW() WHERE room_id = $1', [roomId]);
+      
+      // Update in-memory state
+      if (this.roomState[roomId]) {
+        this.roomState[roomId].lastActivityAt = new Date();
+      }
+    } catch (error) {
+      console.error(`Error updating activity for room ${roomId}:`, error);
+    }
+  }
+
   async updateRoomCode(roomId, code) {
+    // Check if room is paused first
+    const room = await this.getRoom(roomId);
+    if (room && room.is_paused) {
+      throw new Error('Room is paused. Code editing is not allowed.');
+    }
+
     // Persist to database first
     try {
-      await db.query('UPDATE rooms SET code = $1 WHERE room_id = $2', [code, roomId]);
+      await db.query('UPDATE rooms SET code = $1, last_activity_at = NOW() WHERE room_id = $2', [code, roomId]);
       console.log(`Successfully updated code for room ${roomId}`);
     } catch (error) {
       console.error(`Error updating code for room ${roomId}:`, error);
@@ -116,12 +143,19 @@ greeter.greet();`;
     // Update in-memory state only after successful database update
     if (!this.roomState[roomId]) this.roomState[roomId] = {};
     this.roomState[roomId].code = code;
+    this.roomState[roomId].lastActivityAt = new Date();
   }
 
   async updateRoomLanguage(roomId, language, code) {
+    // Check if room is paused first
+    const room = await this.getRoom(roomId);
+    if (room && room.is_paused) {
+      throw new Error('Room is paused. Language changes are not allowed.');
+    }
+
     // Persist to database first
     try {
-      const result = await db.query('UPDATE rooms SET language = $1, code = $2 WHERE room_id = $3', [language, code, roomId]);
+      const result = await db.query('UPDATE rooms SET language = $1, code = $2, last_activity_at = NOW() WHERE room_id = $3', [language, code, roomId]);
       console.log(`Successfully updated language and code for room ${roomId}. Rows affected: ${result.rowCount}`);
       
       // Check if any rows were actually updated
@@ -137,6 +171,77 @@ greeter.greet();`;
     if (!this.roomState[roomId]) this.roomState[roomId] = {};
     this.roomState[roomId].language = language;
     this.roomState[roomId].code = code;
+    this.roomState[roomId].lastActivityAt = new Date();
+  }
+
+  async pauseRoom(roomId) {
+    try {
+      await db.query('UPDATE rooms SET is_paused = true, paused_at = NOW() WHERE room_id = $1', [roomId]);
+      
+      // Update in-memory state
+      if (this.roomState[roomId]) {
+        this.roomState[roomId].isPaused = true;
+        this.roomState[roomId].pausedAt = new Date();
+      }
+      
+      console.log(`Room ${roomId} has been paused`);
+    } catch (error) {
+      console.error(`Error pausing room ${roomId}:`, error);
+      throw error;
+    }
+  }
+
+  async unpauseRoom(roomId) {
+    try {
+      await db.query('UPDATE rooms SET is_paused = false, paused_at = NULL, last_activity_at = NOW() WHERE room_id = $1', [roomId]);
+      
+      // Update in-memory state
+      if (this.roomState[roomId]) {
+        this.roomState[roomId].isPaused = false;
+        this.roomState[roomId].pausedAt = null;
+        this.roomState[roomId].lastActivityAt = new Date();
+      }
+      
+      console.log(`Room ${roomId} has been unpaused`);
+    } catch (error) {
+      console.error(`Error unpausing room ${roomId}:`, error);
+      throw error;
+    }
+  }
+
+  async checkRoomPauseStatus(roomId) {
+    const room = await this.getRoom(roomId);
+    return room ? room.is_paused : false;
+  }
+
+  async findRoomsToAutoPause() {
+    try {
+      // Find rooms that are not paused and have been inactive for more than 24 hours
+      const result = await db.query(`
+        SELECT room_id FROM rooms 
+        WHERE is_paused = false 
+        AND last_activity_at < NOW() - INTERVAL '24 hours'
+      `);
+      return result.rows.map(row => row.room_id);
+    } catch (error) {
+      console.error('Error finding rooms to auto-pause:', error);
+      return [];
+    }
+  }
+
+  async startAutoPauseScheduler() {
+    // Run every hour to check for rooms that need to be auto-paused
+    setInterval(async () => {
+      try {
+        const roomsToPause = await this.findRoomsToAutoPause();
+        for (const roomId of roomsToPause) {
+          await this.pauseRoom(roomId);
+          console.log(`Auto-paused room ${roomId} after 24 hours of inactivity`);
+        }
+      } catch (error) {
+        console.error('Error in auto-pause scheduler:', error);
+      }
+    }, 60 * 60 * 1000); // Run every hour
   }
 
   addOutputToRoom(roomId, output, execTimeMs) {
@@ -146,28 +251,37 @@ greeter.greet();`;
     const entry = { timestamp, output };
     if (typeof execTimeMs === 'number') entry.execTimeMs = execTimeMs;
     this.roomState[roomId].outputHistory.push(entry);
+    
+    // Update room activity when code is executed
+    this.updateRoomActivity(roomId);
+    
     return this.roomState[roomId].outputHistory;
   }
 
   clearOutputHistory(roomId) {
-    if (this.roomState[roomId]) {
-      this.roomState[roomId].outputHistory = [];
-    }
-    return [];
+    if (!this.roomState[roomId]) this.roomState[roomId] = { outputHistory: [] };
+    this.roomState[roomId].outputHistory = [];
+    return this.roomState[roomId].outputHistory;
   }
 
   addUserToRoom(roomId, socketId, name) {
     if (!this.userNames[roomId]) this.userNames[roomId] = {};
     this.userNames[roomId][socketId] = { name: name || 'Anonymous', id: socketId };
+    
+    // Update room activity when users join
+    this.updateRoomActivity(roomId);
+    
     return Object.values(this.userNames[roomId]);
   }
 
   removeUserFromRoom(roomId, socketId) {
     if (this.userNames[roomId] && this.userNames[roomId][socketId]) {
       delete this.userNames[roomId][socketId];
-      return Object.values(this.userNames[roomId]);
     }
-    return [];
+    if (!this.userNames[roomId] || Object.keys(this.userNames[roomId]).length === 0) {
+      delete this.userNames[roomId];
+    }
+    return this.userNames[roomId] ? Object.values(this.userNames[roomId]) : [];
   }
 
   getRoomUsers(roomId) {
@@ -213,6 +327,20 @@ greeter.greet();`;
       [dbRoomId]
     );
     return res.rows;
+  }
+
+  async getPlaybackHistory(roomId) {
+    try {
+      // Get room to ensure it exists and get db id
+      const roomRow = await this.getRoom(roomId);
+      if (!roomRow) return [];
+      
+      const result = await db.query('SELECT * FROM edit_history WHERE room_id = $1 ORDER BY seq', [roomRow.id]);
+      return result.rows;
+    } catch (error) {
+      console.error(`Error getting playback history for room ${roomId}:`, error);
+      return [];
+    }
   }
 }
 

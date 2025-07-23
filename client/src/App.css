@@ -409,6 +409,65 @@ main {
   font-size: 0.9rem;
 }
 
+/* Room status and actions styles */
+.room-status-cell {
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.status-active {
+  color: #4CAF50;
+  font-weight: 500;
+}
+
+.status-paused {
+  color: #ff6b6b;
+  font-weight: 500;
+}
+
+.status-detail {
+  font-size: 0.75rem;
+  color: #999;
+  margin-top: 0.25rem;
+  font-weight: normal;
+}
+
+.room-actions-cell {
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.restart-button {
+  background-color: #4CAF50 !important;
+  color: white !important;
+  border: none !important;
+  padding: 0.25rem 0.5rem !important;
+  border-radius: 4px !important;
+  font-size: 0.8rem !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s ease !important;
+}
+
+.restart-button:hover:not(:disabled) {
+  background-color: #45a049 !important;
+}
+
+.restart-button:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+}
+
+/* Update room table to accommodate new columns */
+.room-table th:nth-child(3),
+.room-table td:nth-child(3) {
+  width: 120px;
+}
+
+.room-table th:nth-child(5),
+.room-table td:nth-child(5) {
+  width: 100px;
+}
+
 @media (max-width: 768px) {
   main {
     grid-template-columns: 1fr;
@@ -425,7 +484,11 @@ main {
   }
   
   .room-table th:nth-child(3),
-  .room-table td:nth-child(3) {
+  .room-table td:nth-child(3),
+  .room-table th:nth-child(4),
+  .room-table td:nth-child(4),
+  .room-table th:nth-child(5),
+  .room-table td:nth-child(5) {
     display: none;
   }
 }
