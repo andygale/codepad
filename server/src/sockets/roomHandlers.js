@@ -180,12 +180,12 @@ const setupRoomHandlers = (io, socket) => {
       // Continue with output if we can't check pause status
     }
     
-    const outputHistory = roomService.addOutputToRoom(room, output, execTimeMs);
+    const outputHistory = await roomService.addOutputToRoom(room, output, execTimeMs);
     io.in(room).emit('outputHistory', { outputHistory });
   });
 
-  socket.on('clearOutput', ({ room }) => {
-    const outputHistory = roomService.clearOutputHistory(room);
+  socket.on('clearOutput', async ({ room }) => {
+    const outputHistory = await roomService.clearOutputHistory(room);
     io.in(room).emit('outputHistory', { outputHistory });
   });
 

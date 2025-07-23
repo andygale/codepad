@@ -85,10 +85,12 @@ greeter.greet();`;
     if (dbRoom) {
       // Initialize in-memory state from database if not already loaded
       if (!this.roomState[roomId]) {
+        // Load output history from database
+        const outputHistory = await this.loadOutputHistoryFromDb(roomId);
         this.roomState[roomId] = {
           code: dbRoom.code,
           language: dbRoom.language,
-          outputHistory: [],
+          outputHistory: outputHistory,
           isPaused: dbRoom.is_paused,
           lastActivityAt: dbRoom.last_activity_at,
           pausedAt: dbRoom.paused_at
@@ -244,13 +246,23 @@ greeter.greet();`;
     }, 60 * 60 * 1000); // Run every hour
   }
 
-  addOutputToRoom(roomId, output, execTimeMs) {
+  async addOutputToRoom(roomId, output, execTimeMs) {
     if (!this.roomState[roomId]) this.roomState[roomId] = { outputHistory: [] };
     const timestamp = new Date().toISOString();
     if (!this.roomState[roomId].outputHistory) this.roomState[roomId].outputHistory = [];
     const entry = { timestamp, output };
     if (typeof execTimeMs === 'number') entry.execTimeMs = execTimeMs;
-    this.roomState[roomId].outputHistory.push(entry);
+    
+    // Persist to database first
+    try {
+      await this.saveOutputToDb(roomId, output, execTimeMs);
+      // Update in-memory state only after successful database save
+      this.roomState[roomId].outputHistory.push(entry);
+    } catch (error) {
+      console.error(`Error saving output to database for room ${roomId}:`, error);
+      // Still add to memory even if database save fails to maintain functionality
+      this.roomState[roomId].outputHistory.push(entry);
+    }
     
     // Update room activity when code is executed
     this.updateRoomActivity(roomId);
@@ -258,9 +270,20 @@ greeter.greet();`;
     return this.roomState[roomId].outputHistory;
   }
 
-  clearOutputHistory(roomId) {
+  async clearOutputHistory(roomId) {
     if (!this.roomState[roomId]) this.roomState[roomId] = { outputHistory: [] };
-    this.roomState[roomId].outputHistory = [];
+    
+    // Clear from database first
+    try {
+      await this.clearOutputFromDb(roomId);
+      // Clear in-memory state only after successful database clear
+      this.roomState[roomId].outputHistory = [];
+    } catch (error) {
+      console.error(`Error clearing output from database for room ${roomId}:`, error);
+      // Still clear memory even if database clear fails to maintain functionality
+      this.roomState[roomId].outputHistory = [];
+    }
+    
     return this.roomState[roomId].outputHistory;
   }
 
@@ -340,6 +363,66 @@ greeter.greet();`;
     } catch (error) {
       console.error(`Error getting playback history for room ${roomId}:`, error);
       return [];
+    }
+  }
+
+  // =========================
+  // Code Output Database Methods
+  // =========================
+  
+  async loadOutputHistoryFromDb(roomId) {
+    try {
+      // Get room to ensure it exists and get db id
+      const roomRow = await this.getRoom(roomId);
+      if (!roomRow) return [];
+      
+      const result = await db.query(
+        'SELECT output, exec_time_ms, created_at FROM code_outputs WHERE room_id = $1 ORDER BY created_at ASC',
+        [roomRow.id]
+      );
+      
+      return result.rows.map(row => ({
+        timestamp: row.created_at.toISOString(),
+        output: row.output,
+        ...(row.exec_time_ms !== null && { execTimeMs: row.exec_time_ms })
+      }));
+    } catch (error) {
+      console.error(`Error loading output history from database for room ${roomId}:`, error);
+      return [];
+    }
+  }
+
+  async saveOutputToDb(roomId, output, execTimeMs) {
+    try {
+      // Get room to ensure it exists and get db id
+      const roomRow = await this.getRoom(roomId);
+      if (!roomRow) {
+        throw new Error(`Room ${roomId} not found`);
+      }
+      
+      await db.query(
+        'INSERT INTO code_outputs (room_id, output, exec_time_ms) VALUES ($1, $2, $3)',
+        [roomRow.id, output, execTimeMs || null]
+      );
+    } catch (error) {
+      console.error(`Error saving output to database for room ${roomId}:`, error);
+      throw error;
+    }
+  }
+
+  async clearOutputFromDb(roomId) {
+    try {
+      // Get room to ensure it exists and get db id
+      const roomRow = await this.getRoom(roomId);
+      if (!roomRow) {
+        throw new Error(`Room ${roomId} not found`);
+      }
+      
+      const result = await db.query('DELETE FROM code_outputs WHERE room_id = $1', [roomRow.id]);
+      console.log(`Cleared ${result.rowCount} output records for room ${roomId}`);
+    } catch (error) {
+      console.error(`Error clearing output from database for room ${roomId}:`, error);
+      throw error;
     }
   }
 }
