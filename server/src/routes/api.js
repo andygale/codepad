@@ -2,6 +2,7 @@ const express = require('express');
 const codeExecutionService = require('../services/codeExecutionService');
 const roomService = require('../services/roomService');
 const { requireAuth } = require('../middleware/authMiddleware');
+const { validateCodeSizeMiddleware } = require('../utils/validation');
 
 const router = express.Router();
 
@@ -89,7 +90,7 @@ router.post('/rooms/:roomId/unpause', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/execute', async (req, res) => {
+router.post('/execute', validateCodeSizeMiddleware('code'), async (req, res) => {
   const { code, language, roomId } = req.body;
 
   if (!code || !language) {
@@ -97,6 +98,10 @@ router.post('/execute', async (req, res) => {
       error: 'Missing required fields: code and language' 
     });
   }
+
+  // Log code execution with size info
+  console.log(`Executing ${language} code (${req.codeSizeBytes || 'unknown'} bytes) for room ${roomId || 'none'}`);
+
 
   // Check if room is paused (if roomId is provided)
   if (roomId) {

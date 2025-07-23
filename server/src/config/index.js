@@ -15,6 +15,9 @@ const config = {
   sessionSecret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
   trustProxy: process.env.TRUST_PROXY === 'true',
   
+  // Security configuration
+  maxCodeSizeBytes: parseInt(process.env.MAX_CODE_SIZE_BYTES, 10) || 10240, // 10KB default
+  
   // Language configurations
   languageVersions: {
     javascript: '20.11.1',

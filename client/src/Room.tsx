@@ -8,6 +8,7 @@ import './App.css'; // Reusing styles for now
 import PlaybackModal from './PlaybackModal';
 import Split from 'react-split';
 import { LSPClient } from './services/lspClient';
+import { validateCodeSize, formatBytes } from './utils/validation';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
 
@@ -89,6 +90,8 @@ function Room() {
   const [iframeHtml, setIframeHtml] = useState('');
   const [showPlayback, setShowPlayback] = useState(false);
   const [htmlRunKey, setHtmlRunKey] = useState(0); // Add this to force iframe re-render
+  const [codeSizeError, setCodeSizeError] = useState<string | null>(null);
+  const [codeSize, setCodeSize] = useState<number>(0);
 
   // Refs to access current values in socket event handlers without causing re-renders
   const languageRef = useRef(language);
@@ -117,7 +120,7 @@ function Room() {
   };
 
   const getIsRunDisabled = () => {
-    return isRunning || language === 'plaintext' || isPaused;
+    return isRunning || language === 'plaintext' || isPaused || !!codeSizeError;
   };
 
   // Handle authentication state and name prompt logic
@@ -216,6 +219,15 @@ function Room() {
         isRemoteUpdate.current = true;
         editorRef.current.setValue(code);
         isRemoteUpdate.current = false;
+        
+        // Update code size tracking for remote updates
+        const validation = validateCodeSize(code);
+        setCodeSize(validation.sizeBytes);
+        if (!validation.isValid) {
+          setCodeSizeError(validation.error || 'Code size validation failed');
+        } else {
+          setCodeSizeError(null);
+        }
       }
     });
     
@@ -240,6 +252,15 @@ function Room() {
       setCode(newCode || '');
       setLanguage(language);
       prevLanguage.current = language;
+      
+      // Update code size tracking for language changes
+      const validation = validateCodeSize(newCode || '');
+      setCodeSize(validation.sizeBytes);
+      if (!validation.isValid) {
+        setCodeSizeError(validation.error || 'Code size validation failed');
+      } else {
+        setCodeSizeError(null);
+      }
     });
     socket.on('outputHistory', ({ outputHistory }) => {
       setOutputBlocks(outputHistory);
@@ -461,6 +482,14 @@ function Room() {
     // without preserving old code to prevent accumulation
     const newCode = languageExamples[newLang] || '';
     
+    // Validate the new code size
+    const validation = validateCodeSize(newCode);
+    if (!validation.isValid) {
+      setCodeSizeError(validation.error || 'Code size validation failed');
+      // Don't proceed with language change if code is too large
+      return;
+    }
+    
     console.log('Local language change:', newLang, 'using fresh example');
     isLocalLanguageUpdate.current = true;
     
@@ -473,6 +502,9 @@ function Room() {
     setCode(newCode);
     setLanguage(newLang);
     prevLanguage.current = newLang;
+    setCodeSize(validation.sizeBytes);
+    setCodeSizeError(null);
+    
     if (socketRef.current && roomId) {
       socketRef.current.emit('languageUpdate', { language: newLang, code: newCode, room: roomId });
     }
@@ -483,10 +515,25 @@ function Room() {
       return; // Prevent execution when paused
     }
     
+    // Get the current code directly from the editor
+    const currentCode = editorRef.current ? editorRef.current.getValue() : code;
+    
+    // Validate code size before execution
+    const validation = validateCodeSize(currentCode);
+    if (!validation.isValid) {
+      setCodeSizeError(validation.error || 'Code size validation failed');
+      if (socketRef.current && roomId) {
+        socketRef.current.emit('runOutput', { 
+          output: `Error: ${validation.error}`, 
+          room: roomId 
+        });
+      }
+      return;
+    }
+    
+    setCodeSizeError(null); // Clear any previous errors
     setIsRunning(true);
     try {
-      // Get the current code directly from the editor
-      const currentCode = editorRef.current ? editorRef.current.getValue() : code;
       
       if (language === 'html') {
         setIframeHtml(currentCode);
@@ -581,12 +628,32 @@ function Room() {
     monaco.editor.setModelMarkers(editor.getModel(), 'javascript', []);
     
     setEditorReady(true);
+    
+    // Initialize code size tracking
+    const initialCode = editor.getValue();
+    const initialValidation = validateCodeSize(initialCode);
+    setCodeSize(initialValidation.sizeBytes);
+    if (!initialValidation.isValid) {
+      setCodeSizeError(initialValidation.error || 'Code size validation failed');
+    }
 
     // Main content change handler
     editor.onDidChangeModelContent((event: any) => {
       if (isRemoteUpdate.current || isPaused) {
         return;
       }
+      
+      // Validate code size on every change
+      const currentCode = editor.getValue();
+      const validation = validateCodeSize(currentCode);
+      setCodeSize(validation.sizeBytes);
+      
+      if (!validation.isValid) {
+        setCodeSizeError(validation.error || 'Code size validation failed');
+      } else {
+        setCodeSizeError(null);
+      }
+      
       if (socketRef.current && roomId) {
         // Emit deltas for real-time sync
         socketRef.current.emit('codeDelta', { operations: event.changes, room: roomId, codeSnapshot: editorRef.current.getValue() });
@@ -598,7 +665,11 @@ function Room() {
         debounceTimeoutRef.current = setTimeout(() => {
           if (editorRef.current) {
             const fullCode = editorRef.current.getValue();
-            socketRef.current?.emit('saveCode', { room: roomId, code: fullCode });
+            // Don't save if code is too large
+            const finalValidation = validateCodeSize(fullCode);
+            if (finalValidation.isValid) {
+              socketRef.current?.emit('saveCode', { room: roomId, code: fullCode });
+            }
           }
         }, 2000); // Save after 2 seconds of inactivity
       }
@@ -863,9 +934,12 @@ function Room() {
               onClick={handleRun} 
               disabled={getIsRunDisabled()} 
               className="room-button"
-              style={isPaused ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
+              style={(isPaused || codeSizeError) ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
             >
-              {isRunning ? 'Running...' : isPaused ? 'Run (Paused)' : 'Run'}
+              {isRunning ? 'Running...' : 
+               isPaused ? 'Run (Paused)' : 
+               codeSizeError ? 'Run (Code too large)' : 
+               'Run'}
             </button>
             
             {isAuthenticated && user ? (
@@ -887,13 +961,27 @@ function Room() {
             snapOffset={0}
           >
             <div className="editor-container">
-              <div style={{ marginBottom: 12, textAlign: 'left', color: '#aaa', fontSize: 14 }}>
-                <strong>Users in room:</strong> {users.map((u: { id: string, name: string }) => u.name).join(', ')}
-                {isPaused && (
-                  <span style={{ marginLeft: '1rem', color: '#ff6b6b', fontSize: 12 }}>
-                    (Room is paused)
+              <div style={{ marginBottom: 12, textAlign: 'left', color: '#aaa', fontSize: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <strong>Users in room:</strong> {users.map((u: { id: string, name: string }) => u.name).join(', ')}
+                  {isPaused && (
+                    <span style={{ marginLeft: '1rem', color: '#ff6b6b', fontSize: 12 }}>
+                      (Room is paused)
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ 
+                    color: codeSize > 8192 ? '#ff6b6b' : codeSize > 5120 ? '#ff9800' : '#4CAF50'
+                  }}>
+                    {formatBytes(codeSize)} / 10KB
                   </span>
-                )}
+                  {codeSizeError && (
+                    <span style={{ color: '#ff6b6b', fontSize: 11 }}>
+                      ⚠️ Code too large
+                    </span>
+                  )}
+                </div>
               </div>
               <MonacoEditor
                 height="100%"

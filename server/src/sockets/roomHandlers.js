@@ -1,5 +1,6 @@
 const roomService = require('../services/roomService');
 const RoomService = require('../services/roomService');
+const { validateCodeSize } = require('../utils/validation');
 
 // Debounce map to prevent rapid language updates
 const languageUpdateTimeouts = new Map();
@@ -61,10 +62,17 @@ const setupRoomHandlers = (io, socket) => {
   socket.on('joinRoom', joinRoom);
 
   socket.on('saveCode', async ({ code, room }) => {
+    // Validate code size
+    const validation = validateCodeSize(code);
+    if (!validation.isValid) {
+      socket.emit('room_error', { message: validation.error });
+      return;
+    }
+
     try {
       await roomService.updateRoomCode(room, code);
       await roomService.recordSnapshot(room, code);
-      console.log(`Successfully saved code for room ${room}: ${code.length} characters`);
+      console.log(`Successfully saved code for room ${room}: ${validation.sizeBytes} bytes`);
     } catch (error) {
       console.error(`Error saving code for room ${room}:`, error);
       
@@ -93,6 +101,13 @@ const setupRoomHandlers = (io, socket) => {
   });
 
   socket.on('languageUpdate', async ({ language, code, room }) => {
+    // Validate code size
+    const validation = validateCodeSize(code);
+    if (!validation.isValid) {
+      socket.emit('room_error', { message: validation.error });
+      return;
+    }
+
     // Check if room is paused first
     try {
       const isPaused = await roomService.checkRoomPauseStatus(room);
@@ -114,7 +129,7 @@ const setupRoomHandlers = (io, socket) => {
     // Debounce language updates by 100ms to prevent race conditions
     const timeoutId = setTimeout(async () => {
       try {
-        console.log(`Language update for room ${room}: ${language} with ${code.length} characters`);
+        console.log(`Language update for room ${room}: ${language} with ${validation.sizeBytes} bytes`);
         
         // Update database first
         await roomService.updateRoomLanguage(room, language, code);
