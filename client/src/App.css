@@ -604,3 +604,45 @@ main {
   margin-top: 2rem;
   text-align: center;
 }
+
+/* Instructions Page */
+.instructions-page {
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 0 24px;
+  text-align: left;
+  line-height: 1.6;
+  color: #fff;
+}
+.instructions-page h1 {
+  margin-bottom: 1rem;
+}
+.instructions-page ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+.instructions-page li {
+  margin-bottom: 0.5rem;
+}
+
+/* Header nav */
+.header-nav {
+  margin-left: auto;
+  margin-right: 24px;
+  display: flex;
+  align-items: center;
+}
+.instructions-link {
+  color: #61dafb;
+  font-weight: 500;
+  text-decoration: none;
+  margin-right: 16px;
+  transition: color 0.2s ease;
+}
+.instructions-link:hover {
+  color: #9be2ff;
+}
+.instructions-link:visited {
+  color: #61dafb;
+}

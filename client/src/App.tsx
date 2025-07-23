@@ -12,6 +12,7 @@ import Room from './Room';
 import GuestJoin from './GuestJoin';
 import { AuthProvider, useAuth } from './AuthContext';
 import HandleRedirect from './HandleRedirect'; // Import the new component
+import Instructions from './Instructions';
 import './App.css';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
@@ -108,6 +109,11 @@ function LandingPage() {
             <h1>Welcome to CodeCrush</h1>
             <p>Real-time collaborative code editor.</p>
           </div>
+          {isAuthenticated && (
+            <nav className="header-nav">
+              <Link to="/instructions" className="instructions-link">Instructions</Link>
+            </nav>
+          )}
           {isAuthenticated && user && (
             <div className="user-info">
               <span className="user-name">{user.name}</span>
@@ -227,6 +233,7 @@ function App() {
           } />
           <Route path="/room/:roomId" element={<Room />} />
           <Route path="/join" element={<GuestJoin />} />
+          <Route path="/instructions" element={<Instructions />} />
         </Routes>
       </AuthProvider>
     </Router>
