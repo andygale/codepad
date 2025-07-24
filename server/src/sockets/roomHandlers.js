@@ -182,6 +182,12 @@ const setupRoomHandlers = (io, socket) => {
   });
 
   socket.on('runOutput', async ({ output, execTimeMs, room }) => {
+    // Enhanced logging for debugging blank output issues
+    console.log(`📤 [runOutput] Received output for room ${room}`);
+    console.log(`📤 [runOutput] Output length: ${output?.length || 0}`);
+    console.log(`📤 [runOutput] Output content:`, JSON.stringify(output));
+    console.log(`📤 [runOutput] Execution time: ${execTimeMs}ms`);
+    
     // Check if room is paused before allowing output
     try {
       const isPaused = await roomService.checkRoomPauseStatus(room);
@@ -195,7 +201,13 @@ const setupRoomHandlers = (io, socket) => {
       // Continue with output if we can't check pause status
     }
     
+    // Check for blank output and log warning
+    if (!output || output.length === 0) {
+      console.warn(`⚠️  [runOutput] Blank output detected for room ${room}!`);
+    }
+    
     const outputHistory = await roomService.addOutputToRoom(room, output, execTimeMs);
+    console.log(`📤 [runOutput] Broadcasting output history to room ${room} (${outputHistory.length} total entries)`);
     io.in(room).emit('outputHistory', { outputHistory });
   });
 

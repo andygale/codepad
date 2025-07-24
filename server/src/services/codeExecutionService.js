@@ -16,10 +16,49 @@ class CodeExecutionService {
           name: config.fileNames[language] || 'main.txt', 
           content: code 
         }]
+      }, {
+        timeout: 30000, // 30 second timeout
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
       const elapsed = Date.now() - start;
+      
+      // Enhanced logging for debugging blank output issues
+      console.log(`🔍 [${language}] Piston response received (${elapsed}ms)`);
+      console.log(`🔍 [${language}] Response status:`, response.status);
+      console.log(`🔍 [${language}] Response data:`, JSON.stringify(response.data, null, 2));
+      
       const { run } = response.data;
-      const output = (run.stdout || '') + (run.stderr || '');
+      
+      if (!run) {
+        console.error(`❌ [${language}] No 'run' object in Piston response!`);
+        return {
+          success: false,
+          error: 'Invalid Piston response: missing run object',
+          pistonResponse: response.data
+        };
+      }
+      
+      console.log(`🔍 [${language}] run.stdout:`, JSON.stringify(run.stdout));
+      console.log(`🔍 [${language}] run.stderr:`, JSON.stringify(run.stderr));
+      console.log(`🔍 [${language}] run.code:`, run.code);
+      console.log(`🔍 [${language}] run.signal:`, run.signal);
+      
+      const stdout = run.stdout || '';
+      const stderr = run.stderr || '';
+      const output = stdout + stderr;
+      
+      console.log(`🔍 [${language}] Final output length:`, output.length);
+      console.log(`🔍 [${language}] Final output:`, JSON.stringify(output));
+      
+      // Check for potential issues
+      if (output.length === 0) {
+        console.warn(`⚠️  [${language}] Zero-length output detected!`);
+        console.warn(`⚠️  [${language}] stdout was:`, run.stdout);
+        console.warn(`⚠️  [${language}] stderr was:`, run.stderr);
+        console.warn(`⚠️  [${language}] Exit code:`, run.code);
+      }
 
       return { 
         success: true, 
