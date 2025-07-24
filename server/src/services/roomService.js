@@ -307,6 +307,13 @@ greeter.greet();`;
     return this.userNames[roomId] ? Object.values(this.userNames[roomId]) : [];
   }
 
+  getUserName(roomId, socketId) {
+    if (!this.userNames[roomId] || !this.userNames[roomId][socketId]) {
+      return null;
+    }
+    return this.userNames[roomId][socketId].name;
+  }
+
   getRoomUsers(roomId) {
     return this.userNames[roomId] ? Object.values(this.userNames[roomId]) : [];
   }
@@ -423,6 +430,72 @@ greeter.greet();`;
     } catch (error) {
       console.error(`Error clearing output from database for room ${roomId}:`, error);
       throw error;
+    }
+  }
+
+  // =========================
+  // User Events Database Methods
+  // =========================
+  
+  async saveUserEvent(roomId, userName, userId, eventType, eventData = null) {
+    try {
+      // Get room to ensure it exists and get db id
+      const roomRow = await this.getRoom(roomId);
+      if (!roomRow) {
+        throw new Error(`Room ${roomId} not found`);
+      }
+      
+      await db.query(
+        'INSERT INTO user_events (room_id, user_name, user_id, event_type, event_data) VALUES ($1, $2, $3, $4, $5)',
+        [roomRow.id, userName, userId, eventType, eventData ? JSON.stringify(eventData) : null]
+      );
+      
+      console.log(`Saved user event for room ${roomId}: ${userName} - ${eventType}`);
+    } catch (error) {
+      console.error(`Error saving user event for room ${roomId}:`, error);
+      throw error;
+    }
+  }
+
+  async getUserEvents(roomId, limit = 50) {
+    try {
+      // Get room to ensure it exists and get db id
+      const roomRow = await this.getRoom(roomId);
+      if (!roomRow) {
+        return [];
+      }
+      
+      const result = await db.query(
+        'SELECT user_name, user_id, event_type, event_data, created_at FROM user_events WHERE room_id = $1 ORDER BY created_at DESC LIMIT $2',
+        [roomRow.id, limit]
+      );
+      
+      return result.rows.map(row => {
+        let parsedData = null;
+        if (row.event_data !== null && row.event_data !== undefined) {
+          // `pg` returns JSONB columns as plain JS objects. However, older rows might be strings
+          if (typeof row.event_data === 'string') {
+            try {
+              parsedData = JSON.parse(row.event_data);
+            } catch (err) {
+              console.warn('Failed to parse event_data string, returning raw value', err);
+              parsedData = row.event_data;
+            }
+          } else {
+            parsedData = row.event_data; // Already an object
+          }
+        }
+        return {
+          userName: row.user_name,
+          userId: row.user_id,
+          eventType: row.event_type,
+          eventData: parsedData,
+          timestamp: row.created_at.toISOString()
+        };
+      });
+    } catch (error) {
+      console.error(`Error getting user events for room ${roomId}:`, error);
+      return [];
     }
   }
 }

@@ -6,6 +6,7 @@ import axios from 'axios';
 import { useAuth } from './AuthContext';
 import './App.css'; // Reusing styles for now
 import PlaybackModal from './PlaybackModal';
+import UserEvents from './UserEvents';
 import Split from 'react-split';
 import { LSPClient } from './services/lspClient';
 import { validateCodeSize, formatBytes } from './utils/validation';
@@ -37,6 +38,8 @@ type ServerEvents = {
   room_error: (data: { message: string }) => void;
   room_details: (data: { title: string; createdAt: string; isPaused?: boolean; pausedAt?: string; lastActivityAt?: string }) => void;
   roomPauseStatus: (data: { isPaused: boolean }) => void;
+  newUserEvent: (data: { userName: string; userId: string | null; eventType: string; eventData: any; timestamp: string }) => void;
+  userEventsHistory: (data: { events: Array<{ userName: string; userId: string | null; eventType: string; eventData: any; timestamp: string }> }) => void;
 };
 
 type ClientEvents = {
@@ -50,6 +53,8 @@ type ClientEvents = {
   clearOutput: (data: { room: string }) => void;
   pauseRoom: (data: { roomId: string }) => void;
   unpauseRoom: (data: { roomId: string }) => void;
+  userEvent: (data: { roomId: string; eventType: string; eventData?: any }) => void;
+  getUserEvents: (data: { roomId: string }) => void;
 };
 
 function Room() {
@@ -93,6 +98,12 @@ function Room() {
   const [codeSizeError, setCodeSizeError] = useState<string | null>(null);
   const [codeSize, setCodeSize] = useState<number>(0);
 
+  // User Events state
+  const [activeTab, setActiveTab] = useState<'output' | 'events'>('output');
+  const [userEvents, setUserEvents] = useState<Array<{ userName: string; userId: string | null; eventType: string; eventData: any; timestamp: string }>>([]);
+  const [hasNewEvents, setHasNewEvents] = useState(false);
+  const activeTabRef = useRef<'output' | 'events'>('output');
+
   // Refs to access current values in socket event handlers without causing re-renders
   const languageRef = useRef(language);
   const usersRef = useRef(users);
@@ -105,6 +116,10 @@ function Room() {
   useEffect(() => {
     usersRef.current = users;
   }, [users]);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
 
   const languageExamples: Record<string, string> = {
     javascript: `console.log('Hello, world!');\nconsole.log('Running Node.js version:', process.version);`,
@@ -316,6 +331,19 @@ function Room() {
       });
     });
 
+    // User Events socket listeners
+    socket.on('newUserEvent', (eventData) => {
+      setUserEvents(prev => [eventData, ...prev]);
+      // If user is not on events tab, show new event indicator
+      if (activeTabRef.current !== 'events') {
+        setHasNewEvents(true);
+      }
+    });
+
+    socket.on('userEventsHistory', ({ events }) => {
+      setUserEvents(events);
+    });
+
     return () => {
       socket.disconnect();
       // Clean up debounce timeout
@@ -324,6 +352,59 @@ function Room() {
       }
     };
   }, [roomId, name, namePrompt]);
+
+  // Browser focus/blur event detection (only for non-authenticated users)
+  useEffect(() => {
+    if (!socketRef.current || !roomId || isAuthenticated) return;
+
+    const handleFocus = () => {
+      socketRef.current?.emit('userEvent', { 
+        roomId, 
+        eventType: 'focus_gained'
+      });
+    };
+
+    const handleBlur = () => {
+      socketRef.current?.emit('userEvent', { 
+        roomId, 
+        eventType: 'focus_lost'
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Tab became hidden (user switched away)
+        socketRef.current?.emit('userEvent', { 
+          roomId, 
+          eventType: 'focus_lost'
+        });
+      } else {
+        // Tab became visible (user switched back)
+        socketRef.current?.emit('userEvent', { 
+          roomId, 
+          eventType: 'focus_gained'
+        });
+      }
+    };
+
+    // Use both window events and visibility API for better coverage
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [roomId, socketRef.current, isAuthenticated]);
+
+  // Request user events history when authenticated user is ready
+  useEffect(() => {
+    if (isAuthenticated && socketRef.current && roomId) {
+      socketRef.current.emit('getUserEvents', { roomId });
+    }
+  }, [isAuthenticated, roomId, socketRef.current]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -700,6 +781,24 @@ function Room() {
         }, 50);
       }
     });
+
+    // Paste event detection (only for non-authenticated users)
+    editor.onDidPaste((e: any) => {
+      if (socketRef.current && roomId && e.range && !isAuthenticated) {
+        // Calculate the number of characters pasted
+        const model = editor.getModel();
+        if (model) {
+          const pastedText = model.getValueInRange(e.range);
+          const characterCount = pastedText.length;
+          
+          socketRef.current.emit('userEvent', {
+            roomId,
+            eventType: 'paste',
+            eventData: { characterCount }
+          });
+        }
+      }
+    });
   }
 
   // Update editor read-only status when pause state changes
@@ -788,6 +887,17 @@ function Room() {
       setCopyMsg('Room URL copied!');
       setTimeout(() => setCopyMsg(''), 2000);
     });
+  };
+
+  const handleTabChange = (tab: 'output' | 'events') => {
+    setActiveTab(tab);
+    if (tab === 'events') {
+      setHasNewEvents(false);
+      // Request user events if we haven't loaded them yet
+      if (isAuthenticated && socketRef.current && roomId && userEvents.length === 0) {
+        socketRef.current.emit('getUserEvents', { roomId });
+      }
+    }
   };
 
   if (roomStatus === 'loading' || loading) {
@@ -993,47 +1103,111 @@ function Room() {
               />
             </div>
             <div className="output-container">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ margin: 0, color: '#aaa' }}>Output</h3>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <label style={{ fontSize: '12px', color: '#aaa', display: 'flex', alignItems: 'center' }}>
-                    <input
-                      type="checkbox"
-                      checked={wrapOutput}
-                      onChange={(e) => setWrapOutput(e.target.checked)}
-                      style={{ marginRight: '4px' }}
-                    />
-                    Wrap lines
-                  </label>
-                  <button onClick={handleClearOutput} className="room-button">Clear Output</button>
-                </div>
+              {/* Tab Headers */}
+              <div style={{ display: 'flex', marginBottom: 12, borderBottom: '1px solid #333' }}>
+                <button 
+                  onClick={() => handleTabChange('output')}
+                  style={{
+                    background: activeTab === 'output' ? '#333' : 'transparent',
+                    color: activeTab === 'output' ? '#fff' : '#aaa',
+                    border: 'none',
+                    padding: '8px 16px',
+                    cursor: 'pointer',
+                    borderBottom: activeTab === 'output' ? '2px solid #61dafb' : '2px solid transparent',
+                    fontSize: '14px'
+                  }}
+                >
+                  Code Output
+                </button>
+                {isAuthenticated && (
+                  <button 
+                    onClick={() => handleTabChange('events')}
+                    style={{
+                      background: activeTab === 'events' ? '#333' : 'transparent',
+                      color: activeTab === 'events' ? '#fff' : '#aaa',
+                      border: 'none',
+                      padding: '8px 16px',
+                      cursor: 'pointer',
+                      borderBottom: activeTab === 'events' ? '2px solid #61dafb' : '2px solid transparent',
+                      fontSize: '14px',
+                      position: 'relative'
+                    }}
+                  >
+                    User Events
+                    {hasNewEvents && (
+                      <span style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '8px',
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        backgroundColor: '#ff6b6b',
+                        animation: 'pulse 2s infinite'
+                      }} />
+                    )}
+                  </button>
+                )}
               </div>
-              {language === 'html' && iframeHtml ? (
-                <iframe
-                  key={htmlRunKey}
-                  srcDoc={iframeHtml}
-                  style={{ width: '100%', height: '300px', border: '1px solid #333', backgroundColor: 'white' }}
-                  title="HTML Output"
-                />
-              ) : (
-                <div className="output-box">
-                  {outputBlocks.map((block, idx) => (
-                    <div key={idx} style={{ marginBottom: 16 }}>
-                      <div style={{ color: '#aaa', fontSize: 12, marginBottom: 4 }}>
-                        Run at {new Date(block.timestamp).toLocaleString(undefined, { 
-                          year: 'numeric', 
-                          month: 'numeric', 
-                          day: 'numeric', 
-                          hour: 'numeric', 
-                          minute: 'numeric', 
-                          second: 'numeric',
-                          timeZoneName: 'short'
-                        })}{typeof block.execTimeMs === 'number' ? ` | Time: ${block.execTimeMs} ms` : ''}
-                      </div>
-                      <pre style={{ margin: 0, whiteSpace: wrapOutput ? 'pre-wrap' : 'pre', overflowX: wrapOutput ? 'auto' : 'scroll' }}>{block.output}</pre>
+
+              {/* Tab Content */}
+              {activeTab === 'output' && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h3 style={{ margin: 0, color: '#aaa' }}>Output</h3>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <label style={{ fontSize: '12px', color: '#aaa', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={wrapOutput}
+                          onChange={(e) => setWrapOutput(e.target.checked)}
+                          style={{ marginRight: '4px' }}
+                        />
+                        Wrap lines
+                      </label>
+                      <button onClick={handleClearOutput} className="room-button">Clear Output</button>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                  {language === 'html' && iframeHtml ? (
+                    <iframe
+                      key={htmlRunKey}
+                      srcDoc={iframeHtml}
+                      style={{ width: '100%', height: '300px', border: '1px solid #333', backgroundColor: 'white' }}
+                      title="HTML Output"
+                    />
+                  ) : (
+                    <div className="output-box">
+                      {outputBlocks.map((block, idx) => (
+                        <div key={idx} style={{ marginBottom: 16 }}>
+                          <div style={{ color: '#aaa', fontSize: 12, marginBottom: 4 }}>
+                            Run at {new Date(block.timestamp).toLocaleString(undefined, { 
+                              year: 'numeric', 
+                              month: 'numeric', 
+                              day: 'numeric', 
+                              hour: 'numeric', 
+                              minute: 'numeric', 
+                              second: 'numeric',
+                              timeZoneName: 'short'
+                            })}{typeof block.execTimeMs === 'number' ? ` | Time: ${block.execTimeMs} ms` : ''}
+                          </div>
+                          <pre style={{ margin: 0, whiteSpace: wrapOutput ? 'pre-wrap' : 'pre', overflowX: wrapOutput ? 'auto' : 'scroll' }}>{block.output}</pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {activeTab === 'events' && isAuthenticated && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h3 style={{ margin: 0, color: '#aaa' }}>User Events</h3>
+                    <div style={{ fontSize: '12px', color: '#888' }}>
+                      Activity tracking for authenticated users
+                    </div>
+                  </div>
+                  <UserEvents events={userEvents} />
+                </>
               )}
             </div>
           </Split>

@@ -120,6 +120,22 @@
   border-radius: 4px;
 }
 
+/* User Events pulse animation */
+@keyframes pulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .output-box::-webkit-scrollbar-thumb:hover,
 .output-box pre::-webkit-scrollbar-thumb:hover {
   background: #777;

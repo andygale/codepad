@@ -263,6 +263,65 @@ const setupRoomHandlers = (io, socket) => {
     }
   });
 
+  // User Events Handlers
+  socket.on('userEvent', async ({ roomId, eventType, eventData }) => {
+    try {
+      // Only track events for non-authenticated users (candidates)
+      if (isAuthenticated) {
+        console.log(`Skipping event for authenticated user: ${user.name} - ${eventType}`);
+        return;
+      }
+
+      // Get user information (only for guests)
+      const userDisplayName = roomService.getUserName(roomId, socket.id) || 'Guest';
+      const userId = null; // Always null for guests
+
+      // Save the event to database
+      await roomService.saveUserEvent(roomId, userDisplayName, userId, eventType, eventData);
+
+      // Broadcast the event to authenticated users only in the room
+      const eventPayload = {
+        userName: userDisplayName,
+        userId: userId,
+        eventType: eventType,
+        eventData: eventData,
+        timestamp: new Date().toISOString()
+      };
+
+      // Get all sockets in the room and emit only to authenticated ones
+      const socketsInRoom = await io.in(roomId).fetchSockets();
+      for (const roomSocket of socketsInRoom) {
+        const roomSession = roomSocket.request.session;
+        const roomUser = roomSession && roomSession.user && roomSession.user.isAuthenticated ? roomSession.user : null;
+        if (roomUser) {
+          // Only send to authenticated users
+          roomSocket.emit('newUserEvent', eventPayload);
+        }
+      }
+
+      console.log(`User event recorded for room ${roomId}: ${userDisplayName} - ${eventType}`);
+    } catch (error) {
+      console.error('Error handling user event:', error);
+      socket.emit('room_error', { message: 'Failed to record user event.' });
+    }
+  });
+
+  socket.on('getUserEvents', async ({ roomId }) => {
+    // Only allow authenticated users to fetch user events
+    if (!isAuthenticated) {
+      socket.emit('room_error', { message: 'Authentication required to view user events.' });
+      return;
+    }
+
+    try {
+      const events = await roomService.getUserEvents(roomId);
+      socket.emit('userEventsHistory', { events });
+    } catch (error) {
+      console.error('Error fetching user events:', error);
+      socket.emit('room_error', { message: 'Failed to fetch user events.' });
+    }
+  });
+
   socket.on('disconnecting', () => {
     for (const room of socket.rooms) {
       if (room !== socket.id) { // Skip the socket's own room
