@@ -36,7 +36,9 @@ const sessionMiddleware = session({
     secure: config.nodeEnv === 'production',
     httpOnly: true,
     maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
+    sameSite: 'lax', // Use 'lax' since frontend and backend are same domain
   },
+  name: 'codecrush.sid', // Custom session cookie name for easier debugging
 });
 
 // Socket.IO setup
@@ -55,6 +57,20 @@ languageServerService.initialize();
 
 // Apply middleware
 app.use(sessionMiddleware);
+
+// Debug middleware to log session info
+app.use((req, res, next) => {
+  if (req.url.includes('/api/auth/')) {
+    console.log(`=== ${req.method} ${req.url} ===`);
+    console.log('Session ID:', req.sessionID);
+    console.log('Session exists:', !!req.session);
+    console.log('Session user:', req.session?.user);
+    console.log('Cookies:', req.headers.cookie);
+    console.log('X-Forwarded-Proto:', req.headers['x-forwarded-proto']);
+  }
+  next();
+});
+
 app.use(cors({
   origin: config.corsOrigin,
   credentials: true

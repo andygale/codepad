@@ -10,6 +10,9 @@ services:
       - DATABASE_SSL=true
       - PISTON_API_URL=http://host.docker.internal:2000/api/v2/execute
       - NODE_TLS_REJECT_UNAUTHORIZED=0
+      - CORS_ORIGIN=https://interview-applications-sbx.tamg.cloud
+      - TRUST_PROXY=true
+      - SESSION_SECRET=${SESSION_SECRET:-your-production-secret-key}
     restart: unless-stopped
     volumes:
       - language-servers:/app/language-servers
