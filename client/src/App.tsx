@@ -13,6 +13,7 @@ import GuestJoin from './GuestJoin';
 import { AuthProvider, useAuth } from './AuthContext';
 import HandleRedirect from './HandleRedirect'; // Import the new component
 import Instructions from './Instructions';
+import codeCrushLogo from './assets/CodeCrush_logo.jpeg';
 import './App.css';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
@@ -192,9 +193,12 @@ function LandingPage() {
     <div className="landing-page">
       <header className="app-header">
         <div className="header-content">
-          <div>
-            <h1>Welcome to CodeCrush</h1>
-            <p>Real-time collaborative code editor.</p>
+          <div className="logo-section">
+            <img src={codeCrushLogo} alt="CodeCrush Logo" className="app-logo" />
+            <div>
+              <h1>Welcome to CodeCrush</h1>
+              <p>Real-time collaborative code editor.</p>
+            </div>
           </div>
           {isAuthenticated && (
             <nav className="header-nav">

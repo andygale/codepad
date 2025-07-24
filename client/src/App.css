@@ -28,6 +28,18 @@
   flex: 1;
 }
 
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.app-logo {
+  height: 80px;
+  width: auto;
+  border-radius: 8px;
+}
+
 .App-link {
   color: #61dafb;
 }
