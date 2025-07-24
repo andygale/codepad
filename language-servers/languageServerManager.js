@@ -92,6 +92,7 @@ class LanguageServerManager {
     try {
       const desiredVersion = '1.10.2';
       const jarName = `kotlinx-coroutines-core-jvm-${desiredVersion}.jar`;
+      const altJarName = `kotlinx-coroutines-core-${desiredVersion}.jar`; // some launch scripts expect this name
       const libDir = path.join(config.serverDir, 'server', 'lib');
 
       if (!fs.existsSync(libDir)) {
@@ -101,7 +102,7 @@ class LanguageServerManager {
       }
 
       // Remove any outdated coroutine jars to avoid duplicate classes
-      const existing = fs.readdirSync(libDir).filter(f => f.startsWith('kotlinx-coroutines-core-jvm-') && f.endsWith('.jar'));
+      const existing = fs.readdirSync(libDir).filter(f => (f.startsWith('kotlinx-coroutines-core-jvm-') || f.startsWith('kotlinx-coroutines-core-')) && f.endsWith('.jar'));
       for (const f of existing) {
         if (f !== jarName) {
           fs.rmSync(path.join(libDir, f));
@@ -124,6 +125,23 @@ class LanguageServerManager {
         });
         downloaded = true;
         console.log(`[LS Manager] Added ${jarName} to LS lib`);
+      }
+
+      // Ensure an alternative file name without the "-jvm" classifier exists as some KLS launch scripts
+      // still hard-code that pattern. Keep a hard link/copy to avoid doubling disk usage.
+      try {
+        const altPath = path.join(libDir, altJarName);
+        if (!fs.existsSync(altPath)) {
+          // Use a hard link when possible, fall back to a normal copy otherwise
+          try {
+            fs.linkSync(targetPath, altPath);
+          } catch {
+            fs.copyFileSync(targetPath, altPath);
+          }
+          console.log(`[LS Manager] Added alias ${altJarName} → ${jarName}`);
+        }
+      } catch (err) {
+        console.warn('[LS Manager] Unable to create alt coroutines jar', err);
       }
 
       // Also place the jar in local Maven repository so that the LS can find it when Gradle is absent.
