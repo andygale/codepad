@@ -441,7 +441,14 @@ function Room() {
         lspClientRef.current = null;
         setLspStatus('disconnected');
         if (monacoRef.current && editorRef.current) {
-          monacoRef.current.editor.setModelMarkers(editorRef.current.getModel(), 'lsp', []);
+          // Clear ALL possible marker types to remove any remaining red squiggles
+          const model = editorRef.current.getModel();
+          monacoRef.current.editor.setModelMarkers(model, 'lsp', []);
+          monacoRef.current.editor.setModelMarkers(model, 'typescript', []);
+          monacoRef.current.editor.setModelMarkers(model, 'javascript', []);
+          monacoRef.current.editor.setModelMarkers(model, 'python', []);
+          monacoRef.current.editor.setModelMarkers(model, 'java', []);
+          monacoRef.current.editor.setModelMarkers(model, 'kotlin', []);
         }
       } else if (newEnabled && editorRef.current && socketRef.current && roomId && editorReady) {
         // Enable LSP - reinitialize
