@@ -125,10 +125,18 @@ PORT=3001
 DATABASE_URL=postgresql://codecrush:YourPassword@your-rds-endpoint.region.rds.amazonaws.com:5432/codecrush
 DATABASE_SSL=true
 
+# SECURITY: CORS Configuration (REQUIRED for production)
+# Set this to your actual domain where the app will be hosted
+CORS_ORIGIN=https://codecrush.yourdomain.com
+# For multiple domains: CORS_ORIGIN=https://codecrush.yourdomain.com,https://www.codecrush.yourdomain.com
+
 # Code Execution (choose one)
 PISTON_API_URL=https://emkc.org/api/v2/piston/execute  # Public API
 # PISTON_API_URL=https://your-piston.onrender.com/api/v2/execute  # Your Piston
 # PISTON_API_URL=http://localhost:2000/api/v2/execute  # Local Piston
+
+# SECURITY: Session Secret (REQUIRED - generate a strong random secret)
+SESSION_SECRET=your-secure-random-session-secret-here
 
 # Optional: Authentication
 # GOOGLE_CLIENT_ID=your_google_client_id

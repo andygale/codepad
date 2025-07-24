@@ -22,6 +22,47 @@ docker build -t codecrush .
 docker run -p 3001:3001 codecrush
 ```
 
+## Security Configuration
+
+### CORS (Cross-Origin Resource Sharing)
+**CRITICAL**: Proper CORS configuration is essential for security.
+
+#### Development Environment
+The application automatically allows common development origins:
+- `http://localhost:3000`
+- `http://localhost:3001` 
+- `http://localhost:5000`
+- `http://127.0.0.1:*` variants
+
+#### Production Environment
+**You MUST set the CORS_ORIGIN environment variable in production:**
+
+```bash
+# Single domain
+CORS_ORIGIN=https://yourdomain.com
+
+# Multiple domains (comma-separated)
+CORS_ORIGIN=https://yourdomain.com,https://www.yourdomain.com,https://app.yourdomain.com
+
+# With subdomains
+CORS_ORIGIN=https://codecrush.yourdomain.com,https://api.yourdomain.com
+```
+
+**⚠️ WARNING**: If CORS_ORIGIN is not set in production, the application will deny all cross-origin requests for security.
+
+#### Common CORS Configurations
+
+```bash
+# AWS CloudFront + Custom Domain
+CORS_ORIGIN=https://codecrush.example.com
+
+# Multiple environments
+CORS_ORIGIN=https://codecrush.example.com,https://codecrush-staging.example.com
+
+# Local development override
+CORS_ORIGIN=http://localhost:3000,http://localhost:5000
+```
+
 ## IntelliSense Features
 
 ### Supported Languages
@@ -52,6 +93,8 @@ NODE_ENV=production
 PORT=3001
 DATABASE_URL=postgresql://user:pass@localhost:5432/codecrush
 PISTON_API_URL=http://localhost:2000
+CORS_ORIGIN=https://yourdomain.com
+SESSION_SECRET=your-secure-random-secret
 ```
 
 ## Deployment Options
@@ -74,6 +117,7 @@ docker build -t codecrush .
 docker run -p 3001:3001 \
   -e DATABASE_URL=postgresql://... \
   -e PISTON_API_URL=http://... \
+  -e CORS_ORIGIN=https://yourdomain.com \
   codecrush
 ```
 

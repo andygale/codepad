@@ -12,6 +12,13 @@ DATABASE_SSL=true
 # Tell Node.js to accept self-signed certificates from RDS
 NODE_TLS_REJECT_UNAUTHORIZED=0
 
+# SECURITY: CORS Configuration
+# CRITICAL: Set this to your actual domain(s) in production
+# For single domain:
+CORS_ORIGIN=https://yourdomain.com
+# For multiple domains (comma-separated):
+# CORS_ORIGIN=https://yourdomain.com,https://www.yourdomain.com,https://app.yourdomain.com
+
 # Code Execution Service
 # Option 1: Use hosted Piston (rate limited)
 # PISTON_API_URL=https://emkc.org/api/v2/piston/execute
