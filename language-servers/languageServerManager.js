@@ -208,7 +208,7 @@ class LanguageServerManager {
       // Choose correct SWT configuration dir.
       let platform;
       if (process.platform === 'darwin') {
-        platform = 'config_mac';
+        platform = process.arch === 'arm64' ? 'config_mac_arm' : 'config_mac';
       } else if (process.platform === 'win32') {
         platform = 'config_win';
       } else {
