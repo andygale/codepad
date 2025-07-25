@@ -54,6 +54,9 @@ COPY --from=builder /app/server ./server
 COPY --from=builder /app/language-servers ./language-servers
 COPY --from=builder /app/package.json ./
 
+# SECURITY: Copy the AWS RDS CA certificate into the image
+COPY server/config/certs/aws-rds-global-bundle.pem /app/server/config/certs/aws-rds-global-bundle.pem
+
 # Install only production dependencies
 RUN yarn install --production --cwd server
 

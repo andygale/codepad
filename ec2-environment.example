@@ -9,8 +9,8 @@ PORT=3001
 DATABASE_URL=postgresql://username:password@your-rds-endpoint.region.rds.amazonaws.com:5432/codecrush
 DATABASE_SSL=true
 
-# Tell Node.js to accept self-signed certificates from RDS
-NODE_TLS_REJECT_UNAUTHORIZED=0
+# SECURITY FIX: Removed NODE_TLS_REJECT_UNAUTHORIZED=0.
+# The application now uses the AWS RDS CA certificate for secure validation.
 
 # SECURITY: CORS Configuration
 # CRITICAL: Set this to your actual domain(s) in production
