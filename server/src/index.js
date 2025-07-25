@@ -18,10 +18,9 @@ const dbService = require('./services/dbService');
 const app = express();
 const server = http.createServer(app);
 
-// Trust the first proxy if configured
-if (config.trustProxy) {
-  app.set('trust proxy', 1);
-}
+// SECURITY: Enable 'trust proxy' to ensure secure cookies work behind Nginx.
+// This allows Express to trust the X-Forwarded-* headers set by the proxy.
+app.set('trust proxy', 1);
 
 // Session middleware setup
 const sessionMiddleware = session({
