@@ -9,8 +9,8 @@ const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   
   // Microsoft Authentication
-  microsoftClientId: process.env.MICROSOFT_CLIENT_ID || '7d539d3e-b9fa-4ec7-b8e9-ab88ec1db4af',
-  microsoftTenantId: process.env.MICROSOFT_TENANT_ID || 'cf3dc8a2-b7cc-4452-848f-cb570a56cfbf',
+  microsoftClientId: process.env.MICROSOFT_CLIENT_ID,
+  microsoftTenantId: process.env.MICROSOFT_TENANT_ID,
   
   // Session configuration
   sessionSecret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
@@ -43,6 +43,13 @@ const config = {
     kotlin: 'main.kt'
   }
 };
+
+// CRITICAL: Ensure Microsoft SSO is configured in production
+if (config.nodeEnv === 'production' && (!config.microsoftClientId || !config.microsoftTenantId)) {
+  console.error('FATAL ERROR: MICROSOFT_CLIENT_ID or MICROSOFT_TENANT_ID is not defined in production.');
+  console.error('Please set these environment variables for Microsoft Authentication.');
+  process.exit(1);
+}
 
 /**
  * Get CORS origins based on environment and configuration

@@ -122,6 +122,29 @@ Example:
 
 - `PISTON_API_URL` - Override the Piston API endpoint (default: `http://localhost:2000/api/v2/execute` for local, `https://emkc.org/api/v2/piston/execute` for remote)
 
+## Key Technologies
+- Frontend: React, TypeScript, Monaco Editor, Socket.IO client
+- Backend: Node.js, Express, Socket.IO, WebSocket (for LSP)
+- Database: PostgreSQL with migrations
+- Code Execution: Piston API integration
+- Language Support: Enhanced Kotlin support with LSP integration
+
+## Environment Variables
+
+### Server-Side (`/server/.env`)
+The server is configured via environment variables. See `ec2-environment.example` for a production template.
+- `NODE_ENV`: `development` or `production`
+- `PORT`: Server port (e.g., `3001`)
+- `DATABASE_URL`: Connection string for PostgreSQL.
+- `SESSION_SECRET`: A strong, random string for securing sessions.
+- `MICROSOFT_CLIENT_ID`: The Client ID for your Azure AD application.
+- `MICROSOFT_TENANT_ID`: The Tenant ID for your Azure AD application.
+
+### Client-Side (`/client/.env`)
+The React application is configured at build time using a `.env` file in the `/client` directory.
+- `REACT_APP_MICROSOFT_CLIENT_ID`: The Client ID for your Azure AD application. This is safe to expose in the browser.
+- `REACT_APP_MICROSOFT_TENANT_ID`: The Tenant ID for your Azure AD application.
+
 ## Architecture
 
 ```
