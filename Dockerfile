@@ -14,6 +14,11 @@ RUN apt-get update && \
 # Set working directory
 WORKDIR /app
 
+# SECURITY: Define ARG variables to receive build-time environment variables
+# These will be populated by docker-compose's `build.args`
+ARG REACT_APP_MICROSOFT_CLIENT_ID
+ARG REACT_APP_MICROSOFT_TENANT_ID
+
 # Copy package files
 COPY package*.json yarn.lock ./
 COPY client/package*.json ./client/
@@ -30,6 +35,7 @@ COPY . .
 RUN node language-servers/install.js
 
 # Build the application
+# The ARG values are automatically available as environment variables during this step
 RUN yarn docker:build
 
 # Production stage  

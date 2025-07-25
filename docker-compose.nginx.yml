@@ -1,42 +1,31 @@
 services:
   codecrush:
-    build: .
+    build:
+      context: .
+      args:
+        # Expose REACT_APP variables to the Docker build for the client-side compilation
+        - REACT_APP_MICROSOFT_CLIENT_ID=${REACT_APP_MICROSOFT_CLIENT_ID}
+        - REACT_APP_MICROSOFT_TENANT_ID=${REACT_APP_MICROSOFT_TENANT_ID}
     ports:
-      - "3001:3001"  # Internal port only
-    environment:
-      - NODE_ENV=production
-      - PORT=3001
-      - DATABASE_URL=${DATABASE_URL}
-      - DATABASE_SSL=true
-      - PISTON_API_URL=http://host.docker.internal:2000/api/v2/execute
-      - NODE_TLS_REJECT_UNAUTHORIZED=0
-      - CORS_ORIGIN=https://interview-applications-sbx.tamg.cloud
-      - TRUST_PROXY=true
-      - SESSION_SECRET=${SESSION_SECRET:-your-production-secret-key}
+      - "443:443"
+      - "80:80"
+    # Use env_file to load all variables from .env into the container at runtime
+    env_file:
+      - .env
     restart: unless-stopped
     volumes:
       - language-servers:/app/language-servers
     networks:
       - codecrush-network
-    # Add this to resolve the host machine's IP. Should work on modern Docker.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"      # Standard HTTP port
-      - "443:443"    # Standard HTTPS port
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      # Let's Encrypt SSL certificates - mount directly from system location
-      - /etc/letsencrypt/live/interview-applications-sbx.tamg.cloud/fullchain.pem:/etc/ssl/certs/server.crt:ro
-      - /etc/letsencrypt/live/interview-applications-sbx.tamg.cloud/privkey.pem:/etc/ssl/private/server.key:ro
-    depends_on:
-      - codecrush
-    restart: unless-stopped
-    networks:
-      - codecrush-network
+  # Optional: Piston service if running locally
+  # piston:
+  #   ...
 
 volumes:
   language-servers:

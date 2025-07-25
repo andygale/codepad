@@ -6,6 +6,18 @@ const { validateCodeSizeMiddleware } = require('../utils/validation');
 
 const router = express.Router();
 
+// Whitelist of supported languages
+const SUPPORTED_LANGUAGES = new Set([
+  'javascript',
+  'python',
+  'cpp',
+  'java',
+  'typescript',
+  'deno',
+  'swift',
+  'kotlin'
+]);
+
 router.get('/rooms', requireAuth, async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
   const limit = 10;
@@ -96,6 +108,13 @@ router.post('/execute', validateCodeSizeMiddleware('code'), async (req, res) => 
   if (!code || !language) {
     return res.status(400).json({ 
       error: 'Missing required fields: code and language' 
+    });
+  }
+
+  // SECURITY: Whitelist supported languages
+  if (!SUPPORTED_LANGUAGES.has(language)) {
+    return res.status(400).json({
+      error: `Unsupported language: ${language}. Please use one of: ${[...SUPPORTED_LANGUAGES].join(', ')}`
     });
   }
 
