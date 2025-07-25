@@ -69,16 +69,22 @@ export class LSPClient {
         // Clear existing LSP markers to avoid stale errors
         this.monaco.editor.setModelMarkers(this.editor.getModel()!, 'lsp', []);
 
-        // Send didOpen notification
-        this.sendNotification('textDocument/didOpen', {
-          textDocument: {
-            uri: this.documentUri,
-            languageId: this.language,
-            version: 1,
-            text: this.editor.getValue(),
-          },
-        });
-        resolve();
+        // For Kotlin, use a longer delay to ensure the language server is fully initialized
+        const delay = this.language === 'kotlin' ? 1000 : 50; // 1 second for Kotlin, 50ms for others
+        console.log(`[${new Date().toISOString()}] [LSP Client] Waiting ${delay}ms before sending didOpen to ensure LS readiness`);
+        
+        setTimeout(() => {
+          // Send didOpen notification
+          this.sendNotification('textDocument/didOpen', {
+            textDocument: {
+              uri: this.documentUri,
+              languageId: this.language,
+              version: 1,
+              text: this.editor.getValue(),
+            },
+          });
+          resolve();
+        }, delay);
       });
 
       this.socket.once('lsp-error', (error: any) => {
@@ -131,7 +137,15 @@ export class LSPClient {
     if (message.method === 'textDocument/publishDiagnostics') {
       const params = message.params;
       const IGNORE_CODES = new Set([16777541]); // e.g., "public type must be defined in its own file"
-      const IGNORE_PATTERNS: RegExp[] = [/must be defined in its own file/i];
+      const IGNORE_PATTERNS: RegExp[] = [
+        /must be defined in its own file/i,
+        /Cannot find name 'fun'/i,         // Kotlin LS not ready - basic keywords missing
+        /Cannot find name 'println'/i,     // Kotlin LS not ready - stdlib missing
+        /Cannot find name 'val'/i,         // Kotlin LS not ready - basic keywords missing
+        /Cannot find name 'var'/i,         // Kotlin LS not ready - basic keywords missing
+        /Cannot find name 'class'/i,       // Kotlin LS not ready - basic keywords missing
+        /Cannot find name 'import'/i       // Kotlin LS not ready - basic keywords missing
+      ];
 
       const filtered = (params.diagnostics || []).filter((d: any) => {
         if (IGNORE_CODES.has(Number(d.code))) return false;

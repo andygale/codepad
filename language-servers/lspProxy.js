@@ -1,7 +1,177 @@
 const { v4: uuidv4 } = require('../server/node_modules/uuid');
 const LanguageServerManager = require('./languageServerManager');
-const path = require('path');
+const { spawn } = require('child_process');
+const net = require('net');
 const fs = require('fs');
+const path = require('path');
+
+// SECURITY: Safe workspace configuration
+const MAX_PATH_LENGTH = 1000;
+const MAX_FILE_SIZE = 1024 * 1024; // 1MB limit
+const MAX_FILES_PER_ROOM = 100; // Prevent DoS (per room, not per client)
+const ALLOWED_EXTENSIONS = new Set(['.kt', '.java', '.js', '.ts', '.py', '.cpp', '.c', '.h']);
+
+// Track room workspaces for cleanup and file counting
+const roomWorkspaces = new Map();
+
+/**
+ * SECURITY: Validates and sanitizes file paths to prevent path traversal attacks
+ * @param {string} uri - The URI from the client
+ * @param {string} roomWorkspaceDir - Room workspace directory (for LS compatibility)
+ * @param {string} roomId - Room ID for tracking
+ * @returns {string} - Safe, validated file path within room workspace
+ * @throws {Error} - If path is invalid or unsafe
+ */
+function validateAndSanitizePath(uri, roomWorkspaceDir, roomId) {
+  try {
+    // SECURITY: Check for path traversal in the raw URI BEFORE URL parsing
+    // The URL constructor automatically resolves .. which bypasses security!
+    if (uri.includes('..') || uri.includes('%2e%2e') || uri.includes('%2E%2E')) {
+      throw new Error('Path traversal attempt detected in raw URI');
+    }
+    
+    // Parse the URI
+    const parsed = new URL(uri);
+    
+    // Only allow file:// protocol
+    if (parsed.protocol !== 'file:') {
+      throw new Error(`Invalid protocol: ${parsed.protocol}. Only file:// is allowed.`);
+    }
+    
+    // Get the pathname and decode it
+    let requestedPath = decodeURIComponent(parsed.pathname);
+    
+    // Remove any null bytes or other dangerous characters
+    if (requestedPath.includes('\0') || requestedPath.includes('\x00')) {
+      throw new Error('Null bytes not allowed in file paths');
+    }
+    
+    // Block Windows-style path traversal attempts (even on Unix systems)
+    // This includes \..\, /..\, ..\/, ..\\ and other variations
+    if (requestedPath.match(/\.\.[\\\/]/) || requestedPath.match(/[\\\/]\.\.[\\\/]/) || 
+        requestedPath.includes('..\\') || requestedPath.includes('\\..')||
+        requestedPath.includes('../') || requestedPath.includes('/..')) {
+      throw new Error('Path traversal attempt detected');
+    }
+    
+    // Check path length
+    if (requestedPath.length > MAX_PATH_LENGTH) {
+      throw new Error(`Path too long: ${requestedPath.length} > ${MAX_PATH_LENGTH}`);
+    }
+    
+    // Ensure the room workspace exists
+    if (!fs.existsSync(roomWorkspaceDir)) {
+      throw new Error(`Room workspace does not exist: ${roomWorkspaceDir}`);
+    }
+    
+    // Extract just the filename from the requested path
+    // For LSP, we typically just need the filename (e.g., main.java, main.kt)
+    const filename = path.basename(requestedPath);
+    
+    // Validate filename
+    if (!filename || filename === '.' || filename === '..') {
+      throw new Error('Invalid or empty filename');
+    }
+    
+    // Validate file extension
+    const ext = path.extname(filename).toLowerCase();
+    if (ext && !ALLOWED_EXTENSIONS.has(ext)) {
+      throw new Error(`File extension not allowed: ${ext}. Allowed: ${Array.from(ALLOWED_EXTENSIONS).join(', ')}`);
+    }
+    
+    // Check for dangerous filenames
+    const dangerousNames = ['.env', '.git', 'passwd', 'shadow', 'hosts'];
+    if (dangerousNames.some(name => filename.toLowerCase().includes(name))) {
+      throw new Error(`Dangerous filename detected: ${filename}`);
+    }
+    
+    // Resolve the safe path within the room workspace
+    const safePath = path.join(roomWorkspaceDir, filename);
+    
+    // CRITICAL: Ensure the resolved path is still within the room workspace
+    if (!safePath.startsWith(roomWorkspaceDir + path.sep) && safePath !== roomWorkspaceDir) {
+      throw new Error(`Path traversal attempt detected: ${filename} resolves outside room workspace`);
+    }
+    
+    console.log(`[LSP Security] Validated path for room ${roomId}: ${requestedPath} -> ${safePath}`);
+    return safePath;
+    
+  } catch (error) {
+    console.error(`[LSP Security] Path validation failed for URI ${uri} in room ${roomId}:`, error.message);
+    throw new Error(`Invalid file path: ${error.message}`);
+  }
+}
+
+/**
+ * SECURITY: Safe file writing with additional checks
+ * @param {string} filePath - Validated file path within room workspace
+ * @param {string} content - File content to write
+ * @param {string} roomId - Room ID for tracking and logging
+ */
+function safeWriteFile(filePath, content, roomId) {
+  try {
+    // Additional content validation
+    if (typeof content !== 'string') {
+      throw new Error('File content must be a string');
+    }
+    
+    // Check content size (prevent DoS)
+    if (content.length > MAX_FILE_SIZE) {
+      throw new Error(`File content too large: ${content.length} bytes > ${MAX_FILE_SIZE} bytes`);
+    }
+    
+    // Check number of files in this room (prevent DoS)
+    const roomWorkspace = path.dirname(filePath);
+    if (fs.existsSync(roomWorkspace)) {
+      const files = getAllFilesRecursive(roomWorkspace);
+      if (files.length >= MAX_FILES_PER_ROOM) {
+        throw new Error(`Too many files in room ${roomId}: ${files.length} >= ${MAX_FILES_PER_ROOM}`);
+      }
+    }
+    
+    // Ensure directory exists (the room workspace should already exist)
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
+    }
+    
+    // Write file with safe permissions
+    fs.writeFileSync(filePath, content, { mode: 0o644, flag: 'w' });
+    
+    // Update room workspace tracking
+    roomWorkspaces.set(roomId, Date.now());
+    
+    console.log(`[LSP Security] Safely wrote file for room ${roomId}: ${filePath} (${content.length} bytes)`);
+    
+  } catch (error) {
+    console.error(`[LSP Security] Failed to write file ${filePath}:`, error.message);
+    throw new Error(`Failed to write file: ${error.message}`);
+  }
+}
+
+/**
+ * Helper function to count files recursively
+ */
+function getAllFilesRecursive(dir) {
+  let files = [];
+  try {
+    const items = fs.readdirSync(dir);
+    for (const item of items) {
+      const fullPath = path.join(dir, item);
+      const stat = fs.statSync(fullPath);
+      if (stat.isDirectory()) {
+        files = files.concat(getAllFilesRecursive(fullPath));
+      } else {
+        files.push(fullPath);
+      }
+    }
+  } catch (error) {
+    // Ignore errors, return what we have
+  }
+  return files;
+}
+
+// Note: Room workspace cleanup is handled by LanguageServerManager.cleanupOldSessionDirs()
 
 class LSPProxy {
   constructor() {
@@ -9,11 +179,8 @@ class LSPProxy {
     this.clientConnections = new Map();
     this.buffers = new Map();
     this.messageHandlers = new Map(); // requestId -> { clientId, resolve, reject }
+    this.uriMappings = new Map(); // uri -> { clientId, safePath }
 
-    // Shared Kotlin LS state
-    this.kotlinInitialized = false;
-    this.kotlinCapabilities = null; // cache of initialize result
-    this.roomRefCount = new Map(); // roomId -> active clients count
     
     console.log(`[${new Date().toISOString()}] [LSP Proxy] LSP Proxy initialized`);
   }
@@ -38,11 +205,18 @@ class LSPProxy {
         }
     }
 
+    // For Kotlin, always ensure coroutines are in Gradle cache (even for reused workspaces)
+    if (language === 'kotlin') {
+      console.log(`[${new Date().toISOString()}] [LSP Proxy] Ensuring coroutines dependencies are available in Gradle cache for room ${roomId}`);
+      await this.ensureCoroutinesInGradleCache(roomWorkspaceDir);
+      console.log(`[${new Date().toISOString()}] [LSP Proxy] Coroutines cache population completed for room ${roomId}`);
+    }
+
     // Start language server AFTER workspace is ready
     let languageServer;
     try {
       console.log(`[${new Date().toISOString()}] [LSP Proxy] Starting language server for ${language} in room ${roomId}...`);
-      languageServer = await this.languageServerManager.startLanguageServer(language, language === 'kotlin' ? null : roomId);
+      languageServer = await this.languageServerManager.startLanguageServer(language, roomId);
       console.log(`[${new Date().toISOString()}] [LSP Proxy] Language server started successfully for ${language} in room ${roomId}`);
     } catch (error) {
       console.error(`[${new Date().toISOString()}] [LSP Proxy] Failed to start language server for ${language}:`, error);
@@ -68,11 +242,6 @@ class LSPProxy {
       workspaceUri
     });
 
-    // Update room reference count (for Kotlin shared LS)
-    if (language === 'kotlin') {
-      const current = this.roomRefCount.get(roomId) || 0;
-      this.roomRefCount.set(roomId, current + 1);
-    }
 
     // Set up message handlers
     console.log(`[${new Date().toISOString()}] [LSP Proxy] Setting up message handlers for client ${clientId}`);
@@ -83,11 +252,38 @@ class LSPProxy {
     console.log(`[${new Date().toISOString()}] [LSP Proxy] Initializing language server for client ${clientId}`);
     await this.initializeLanguageServer(clientId);
 
+    // For Kotlin, always force a project import to ensure dependencies are resolved
+    if (language === 'kotlin') {
+      console.log(`[${new Date().toISOString()}] [LSP Proxy] Forcing Gradle project import for workspace: ${workspaceUri}`);
+      try {
+        await this.sendRequest(clientId, 'workspace/executeCommand', {
+          command: 'java.project.import', // Command supported by JDT-based servers
+          arguments: [workspaceUri]
+        });
+        console.log(`[${new Date().toISOString()}] [LSP Proxy] Gradle project import command sent successfully.`);
+        
+        // Give Kotlin LS time to process the Gradle project and index dependencies
+        const delayMs = 3000; // 3 seconds should be sufficient for basic indexing
+        console.log(`[${new Date().toISOString()}] [LSP Proxy] Waiting ${delayMs}ms for Kotlin LS to process Gradle project...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        console.log(`[${new Date().toISOString()}] [LSP Proxy] Kotlin LS initialization delay completed`);
+      } catch (error) {
+        console.error(`[${new Date().toISOString()}] [LSP Proxy] Failed to execute project import command:`, error);
+        // Even if project import fails, give some time for basic Kotlin stdlib indexing
+        const fallbackDelay = 2000;
+        console.log(`[${new Date().toISOString()}] [LSP Proxy] Using fallback delay of ${fallbackDelay}ms for Kotlin LS indexing`);
+        await new Promise(resolve => setTimeout(resolve, fallbackDelay));
+      }
+    }
+
     // Handle client disconnect
     socket.on('disconnect', () => {
       console.log(`[${new Date().toISOString()}] [LSP Proxy] LSP client disconnected: ${clientId}`);
       this.clientConnections.delete(clientId);
       this.buffers.delete(clientId); // Clean up message buffer
+      this.uriMappings.delete(documentUri); // Clean up URI mapping
+      
+      // Note: Room workspace cleanup is handled by the existing LanguageServerManager
       
       // Clean up session workspace
       if (fs.existsSync(sessionWorkspaceDir)) {
@@ -100,33 +296,6 @@ class LSPProxy {
         });
       }
 
-      // Kotlin shared LS: manage room reference count and workspace folder removal
-      const conn = this.clientConnections.get(clientId);
-      if (conn && conn.language === 'kotlin') {
-        const cur = this.roomRefCount.get(roomId) || 0;
-        if (cur > 0) {
-          this.roomRefCount.set(roomId, cur - 1);
-          if (cur - 1 === 0) {
-            try {
-              const removeParams = {
-                event: {
-                  added: [],
-                  removed: [{ uri: conn.workspaceUri, name: path.basename(conn.sessionWorkspaceDir) }]
-                }
-              };
-              const message = {
-                jsonrpc: '2.0',
-                method: 'workspace/didChangeWorkspaceFolders',
-                params: removeParams
-              };
-              const msgStr = JSON.stringify(message);
-              conn.languageServer.stdin.write(`Content-Length: ${msgStr.length}\r\n\r\n${msgStr}`);
-            } catch (err) {
-              console.error('[LSP Proxy] Error sending remove workspace folder', err);
-            }
-          }
-        }
-      }
 
       // Clean up pending requests
       for (const [requestId, handler] of this.messageHandlers.entries()) {
@@ -145,7 +314,7 @@ class LSPProxy {
     
     // Create working Gradle project that should actually resolve dependencies
     const buildGradleContent = `plugins {
-    kotlin("jvm") version "1.9.22"
+    kotlin("jvm") version "2.1.0"
 }
 
 repositories {
@@ -153,14 +322,40 @@ repositories {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2")
+}
+
+// Force Gradle to download dependencies
+configurations.all {
+    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+    resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
 }`;
 
     const buildGradlePath = path.join(projectDir, 'build.gradle.kts');
     if (!fs.existsSync(buildGradlePath)) {
       fs.writeFileSync(buildGradlePath, buildGradleContent);
     }
+
+    // Create gradle.properties to help with dependency resolution
+    const gradlePropsPath = path.join(projectDir, 'gradle.properties');
+    if (!fs.existsSync(gradlePropsPath)) {
+      const gradlePropsContent = `
+# Enable Gradle daemon for faster builds
+org.gradle.daemon=true
+# Enable parallel execution
+org.gradle.parallel=true
+# Enable configuration cache
+org.gradle.configuration-cache=true
+# Use Kotlin incremental compilation
+kotlin.incremental=true
+`;
+      fs.writeFileSync(gradlePropsPath, gradlePropsContent);
+    }
+
+    // Pre-download coroutines JAR to Gradle cache to ensure it's available
+    await this.ensureCoroutinesInGradleCache(projectDir);
 
     // Create main.kt directly in project root
     const mainKtPath = path.join(projectDir, 'main.kt');
@@ -172,11 +367,53 @@ dependencies {
     }
     
     console.log(`[${new Date().toISOString()}] [LSP Proxy] Minimal Kotlin project created with direct JAR references`);
-    
-    // Give Kotlin LS time to process the Gradle project and download/index dependencies
-    const delayMs = this.kotlinInitialized ? 2000 : 10000;
-    console.log(`[${new Date().toISOString()}] [LSP Proxy] Waiting ${delayMs}ms for Kotlin LS to process Gradle project...`);
-    await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+
+  async ensureCoroutinesInGradleCache(projectDir) {
+    try {
+      console.log(`[${new Date().toISOString()}] [LSP Proxy] Pre-downloading coroutines to Gradle cache`);
+      const homeDir = require('os').homedir();
+      const gradleCacheDir = path.join(homeDir, '.gradle', 'caches', 'modules-2', 'files-2.1', 'org.jetbrains.kotlinx');
+      
+      // Ensure both coroutines variants are cached
+      const coroutinesVariants = [
+        'kotlinx-coroutines-core/1.10.2/kotlinx-coroutines-core-1.10.2.jar',
+        'kotlinx-coroutines-core-jvm/1.10.2/kotlinx-coroutines-core-jvm-1.10.2.jar'
+      ];
+      
+      for (const variant of coroutinesVariants) {
+        const cacheDir = path.join(gradleCacheDir, variant.split('/')[0], '1.10.2');
+        const cachedJarPath = path.join(cacheDir, variant.split('/').pop());
+        
+        if (!fs.existsSync(cachedJarPath)) {
+          console.log(`[${new Date().toISOString()}] [LSP Proxy] Downloading ${variant} to Gradle cache`);
+          
+          // Create cache directory structure
+          if (!fs.existsSync(cacheDir)) {
+            fs.mkdirSync(cacheDir, { recursive: true });
+          }
+          
+          // Download from Maven Central
+          const axios = (await import('../server/node_modules/axios/index.js')).default;
+          const mavenUrl = `https://repo1.maven.org/maven2/org/jetbrains/kotlinx/${variant.replace('/', '/1.10.2/')}`;
+          
+          try {
+            const response = await axios({ method: 'get', url: mavenUrl, responseType: 'stream' });
+            await new Promise((resolve, reject) => {
+              const writer = fs.createWriteStream(cachedJarPath);
+              response.data.pipe(writer);
+              writer.on('finish', resolve);
+              writer.on('error', reject);
+            });
+            console.log(`[${new Date().toISOString()}] [LSP Proxy] Downloaded ${variant} to Gradle cache`);
+          } catch (downloadError) {
+            console.warn(`[${new Date().toISOString()}] [LSP Proxy] Failed to download ${variant}:`, downloadError.message);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] [LSP Proxy] Error ensuring coroutines in Gradle cache:`, error);
+    }
   }
 
   setupClientMessageHandlers(clientId, documentUri) {
@@ -196,15 +433,36 @@ dependencies {
         // Intercept didOpen to write the file to the workspace so the LS can find it
         if (message.method === 'textDocument/didOpen') {
           console.log(`[${new Date().toISOString()}] [LSP Proxy] Intercepted textDocument/didOpen for client ${clientId}`);
+          
+          // SECURITY FIX: Validate and sanitize the file path
           const uri = message.params.textDocument.uri;
-          const filePath = new URL(uri).pathname;
-          const fileDir = path.dirname(filePath);
-
-          console.log(`[${new Date().toISOString()}] [LSP Proxy] Writing file to ${filePath}`);
-          if (!fs.existsSync(fileDir)) {
-            fs.mkdirSync(fileDir, { recursive: true });
+          const fileContent = message.params.textDocument.text;
+          
+          try {
+            // Get room workspace from connection
+            const connection = this.clientConnections.get(clientId);
+            if (!connection) {
+              throw new Error('Client connection not found');
+            }
+            
+            const roomWorkspaceDir = connection.sessionWorkspaceDir;
+            const roomId = connection.roomId;
+            
+            const safePath = validateAndSanitizePath(uri, roomWorkspaceDir, roomId);
+            safeWriteFile(safePath, fileContent, roomId);
+            
+            // Update the message with the safe path for the language server
+            message.params.textDocument.uri = `file://${safePath}`;
+            this.uriMappings.set(uri, { clientId, safePath });
+            
+          } catch (securityError) {
+            console.error(`[LSP Security] Blocked unsafe file operation:`, securityError.message);
+            socket.emit('lsp-error', { 
+              error: `Security violation: ${securityError.message}`,
+              type: 'security_error'
+            });
+            return; // Don't forward the message to language server
           }
-          fs.writeFileSync(filePath, message.params.textDocument.text);
         }
 
         await this.sendToLanguageServer(clientId, message);
@@ -252,17 +510,42 @@ dependencies {
     socket.on('lsp-diagnostics', async (params) => {
       console.log(`[${new Date().toISOString()}] [LSP Proxy] Received lsp-diagnostics for client ${clientId}:`, params);
       try {
-        // Create the file in the workspace before sending the didOpen notification
-        const filePath = new URL(documentUri).pathname;
-        const fileDir = path.dirname(filePath);
-        if (!fs.existsSync(fileDir)) {
-          fs.mkdirSync(fileDir, { recursive: true });
+        // SECURITY FIX: Validate and sanitize the file path
+        try {
+          // Get room workspace from connection
+          const connection = this.clientConnections.get(clientId);
+          if (!connection) {
+            throw new Error('Client connection not found');
+          }
+          
+          const roomWorkspaceDir = connection.sessionWorkspaceDir;
+          const roomId = connection.roomId;
+          
+          const safePath = validateAndSanitizePath(documentUri, roomWorkspaceDir, roomId);
+          safeWriteFile(safePath, params.textDocument.text, roomId);
+          
+          // Update params with safe path for diagnostic request
+          const updatedParams = {
+            ...params,
+            textDocument: {
+              ...params.textDocument,
+              uri: `file://${safePath}`
+            }
+          };
+          
+          await this.handleDiagnosticRequest(clientId, updatedParams);
+          
+        } catch (securityError) {
+          console.error(`[LSP Security] Blocked unsafe diagnostic operation:`, securityError.message);
+          socket.emit('lsp-error', { 
+            error: `Security violation in diagnostics: ${securityError.message}`,
+            type: 'security_error'
+          });
         }
-        fs.writeFileSync(filePath, params.textDocument.text);
         
-        await this.handleDiagnosticRequest(clientId, params);
       } catch (error) {
         console.error(`[${new Date().toISOString()}] [LSP Proxy] Error handling diagnostic request for client ${clientId}:`, error);
+        socket.emit('lsp-error', { error: error.message });
       }
     });
   }
@@ -299,17 +582,6 @@ dependencies {
  
      console.log(`[${new Date().toISOString()}] [LSP Proxy] Initializing language server with workspace: ${workspaceUri}`);
 
-    // If Kotlin LS already initialized, just add workspace folder and return instantly
-    if (connection.language === 'kotlin' && this.kotlinInitialized) {
-      // Send workspace/didChangeWorkspaceFolders add
-      await this.sendNotification(clientId, 'workspace/didChangeWorkspaceFolders', {
-        event: {
-          added: [{ uri: workspaceUri, name: path.basename(workspacePath) }],
-          removed: []
-        }
-      });
-      return;
-    }
 
     const initializeParams = {
       processId: process.pid,
@@ -409,10 +681,6 @@ dependencies {
 
     try {
       const initResult = await this.sendRequest(clientId, 'initialize', initializeParams);
-      if (connection.language === 'kotlin') {
-        this.kotlinInitialized = true;
-        this.kotlinCapabilities = initResult;
-      }
 
       // Per LSP spec, the client MUST send an 'initialized' notification once it receives the response
       await this.sendNotification(clientId, 'initialized', {});
@@ -708,6 +976,8 @@ dependencies {
   async handleDiagnosticRequest(clientId, params) {
     await this.sendNotification(clientId, 'textDocument/didOpen', params);
   }
+
+
 }
 
 module.exports = LSPProxy;

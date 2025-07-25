@@ -63,6 +63,25 @@ CORS_ORIGIN=https://codecrush.example.com,https://codecrush-staging.example.com
 CORS_ORIGIN=http://localhost:3000,http://localhost:5000
 ```
 
+### LSP (Language Server Protocol) Security
+
+**Path Traversal Protection**: The LSP proxy now includes comprehensive security measures:
+
+- ✅ **Workspace Isolation**: Each client gets an isolated workspace directory
+- ✅ **Path Validation**: All file paths are validated and sanitized
+- ✅ **Extension Filtering**: Only allowed file extensions (`.kt`, `.java`, `.js`, etc.)
+- ✅ **Protocol Restriction**: Only `file://` protocol allowed
+- ✅ **Automatic Cleanup**: Workspaces cleaned up on client disconnect
+- ✅ **Resource Limits**: File size and count limits prevent DoS
+
+**Testing LSP Security:**
+```bash
+# Run LSP security tests
+node test-lsp-security.js
+
+# Expected: All tests should pass
+```
+
 ## IntelliSense Features
 
 ### Supported Languages
