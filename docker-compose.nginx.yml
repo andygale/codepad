@@ -6,9 +6,9 @@ services:
         # Expose REACT_APP variables to the Docker build for the client-side compilation
         - REACT_APP_MICROSOFT_CLIENT_ID=${REACT_APP_MICROSOFT_CLIENT_ID}
         - REACT_APP_MICROSOFT_TENANT_ID=${REACT_APP_MICROSOFT_TENANT_ID}
-    ports:
-      - "443:443"
-      - "80:80"
+    # No ports are exposed directly from the app container. Nginx handles external traffic.
+    expose:
+      - "3001"
     # Use env_file to load all variables from .env into the container at runtime
     env_file:
       - .env
@@ -18,14 +18,30 @@ services:
     networks:
       - codecrush-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "https://localhost/health"]
+      # The healthcheck now correctly targets the internal port of the Node.js application.
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/info"]
       interval: 30s
       timeout: 10s
       retries: 3
+    # Add this to resolve the host machine's IP for Piston.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  # Optional: Piston service if running locally
-  # piston:
-  #   ...
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"      # Standard HTTP port
+      - "443:443"    # Standard HTTPS port
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # This assumes you have SSL certs. Comment out if you don't.
+      - /etc/letsencrypt/live/interview-applications-sbx.tamg.cloud/fullchain.pem:/etc/ssl/certs/server.crt:ro
+      - /etc/letsencrypt/live/interview-applications-sbx.tamg.cloud/privkey.pem:/etc/ssl/private/server.key:ro
+    depends_on:
+      - codecrush
+    restart: unless-stopped
+    networks:
+      - codecrush-network
 
 volumes:
   language-servers:
