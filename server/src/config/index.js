@@ -8,7 +8,7 @@ const config = {
   corsOrigin: getCorsOrigins(),
   nodeEnv: process.env.NODE_ENV || 'development',
   
-  // Microsoft Authentication
+  // Microsoft SSO
   microsoftClientId: process.env.MICROSOFT_CLIENT_ID,
   microsoftTenantId: process.env.MICROSOFT_TENANT_ID,
   
@@ -44,10 +44,23 @@ const config = {
   }
 };
 
-// CRITICAL: Ensure Microsoft SSO is configured in production
-if (config.nodeEnv === 'production' && (!config.microsoftClientId || !config.microsoftTenantId)) {
-  console.error('FATAL ERROR: MICROSOFT_CLIENT_ID or MICROSOFT_TENANT_ID is not defined in production.');
-  console.error('Please set these environment variables for Microsoft Authentication.');
+// --- Configuration Validation ---
+
+// CRITICAL: Validate that Microsoft SSO configuration is present.
+// These are essential for authentication to function in any environment.
+if (!config.microsoftClientId || !config.microsoftTenantId) {
+  console.error('FATAL ERROR: MICROSOFT_CLIENT_ID or MICROSOFT_TENANT_ID is not defined in the environment.');
+  console.error('Please ensure these variables are set in your .env file for local development or as environment variables in production.');
+  process.exit(1); // Exit immediately if auth config is missing
+}
+
+// Session configuration
+config.sessionSecret = process.env.SESSION_SECRET;
+
+// CRITICAL: Ensure a session secret is provided in production.
+if (config.nodeEnv === 'production' && (!config.sessionSecret || config.sessionSecret === 'your-secret-key-change-in-production')) {
+  console.error('FATAL ERROR: SESSION_SECRET is not defined in production or is the default value.');
+  console.error('Please set this environment variable for session security.');
   process.exit(1);
 }
 
