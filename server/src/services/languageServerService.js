@@ -6,6 +6,7 @@ class LanguageServerService {
     this.lspProxy = new LSPProxy();
     console.log(`[${new Date().toISOString()}] [LSP] Language Server Service initialized`);
     this.clientConnections = new Map(); // roomId -> Map<socketId, clientInfo>
+    this.startingServers = new Set(); // Prevent race conditions
   }
 
   async handleSocketConnection(io, socket) {
@@ -30,7 +31,16 @@ class LanguageServerService {
         return;
       }
 
+      const serverKey = `${roomId}-${language}`;
+
+      // Prevent race condition when multiple clients connect at once
+      if (this.startingServers.has(serverKey)) {
+        console.log(`[${new Date().toISOString()}] [LSP] Language server for ${serverKey} is already starting. Request ignored.`);
+        return;
+      }
+
       try {
+        this.startingServers.add(serverKey);
         console.log(`[${new Date().toISOString()}] [LSP] Starting language server for ${language} in room ${roomId}`);
         const { clientId, documentUri } = await this.lspProxy.handleClientConnection(socket, language, roomId);
         console.log(`[${new Date().toISOString()}] [LSP] Language server started successfully, clientId: ${clientId}, documentUri: ${documentUri}`);
@@ -55,6 +65,8 @@ class LanguageServerService {
         console.error(`[${new Date().toISOString()}] [LSP] Error connecting to language server for ${language}:`, error);
         console.error(`[${new Date().toISOString()}] [LSP] Error stack:`, error.stack);
         socket.emit('lsp-error', { error: `Failed to start ${language} language server: ${error.message}` });
+      } finally {
+        this.startingServers.delete(serverKey);
       }
     });
 

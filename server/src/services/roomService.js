@@ -7,6 +7,7 @@ class RoomService {
   constructor() {
     this.roomState = {};
     this.userNames = {};
+    this.loadingPromises = new Map();
     // Start auto-pause scheduler
     this.startAutoPauseScheduler();
   }
@@ -80,37 +81,55 @@ greeter.greet();`;
   }
 
   async getOrCreateRoom(roomId) {
-    // First try to get from database
-    const dbRoom = await this.getRoom(roomId);
-    if (dbRoom) {
-      // Initialize in-memory state from database if not already loaded
-      if (!this.roomState[roomId]) {
-        // Load output history from database
-        const outputHistory = await this.loadOutputHistoryFromDb(roomId);
-        this.roomState[roomId] = {
-          code: dbRoom.code,
-          language: dbRoom.language,
-          outputHistory: outputHistory,
-          isPaused: dbRoom.is_paused,
-          lastActivityAt: dbRoom.last_activity_at,
-          pausedAt: dbRoom.paused_at
-        };
-      }
+    // If room is already loaded, return it
+    if (this.roomState[roomId]) {
       return this.roomState[roomId];
     }
-    
-    // Fallback to in-memory creation (shouldn't happen with persistent rooms)
-    if (!this.roomState[roomId]) {
-      this.roomState[roomId] = {
-        code: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n    console.log('Running Deno version:', Deno.version.deno);\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
-        language: 'deno',
-        outputHistory: [],
-        isPaused: false,
-        lastActivityAt: new Date(),
-        pausedAt: null
-      };
+
+    // If room is currently being loaded, wait for the existing promise to resolve
+    if (this.loadingPromises.has(roomId)) {
+      return this.loadingPromises.get(roomId);
     }
-    return this.roomState[roomId];
+
+    // If room is not loaded and not being loaded, start loading it
+    const loadingPromise = (async () => {
+      try {
+        const dbRoom = await this.getRoom(roomId);
+        if (dbRoom) {
+          // Initialize in-memory state from database if not already loaded
+          // Pass dbRoom.id to avoid a redundant query
+          const outputHistory = await this.loadOutputHistoryFromDb(roomId, dbRoom.id);
+          this.roomState[roomId] = {
+            code: dbRoom.code,
+            language: dbRoom.language,
+            outputHistory: outputHistory,
+            isPaused: dbRoom.is_paused,
+            lastActivityAt: dbRoom.last_activity_at,
+            pausedAt: dbRoom.paused_at,
+          };
+          return this.roomState[roomId];
+        }
+
+        // Fallback to in-memory creation (shouldn't happen with persistent rooms)
+        if (!this.roomState[roomId]) {
+          this.roomState[roomId] = {
+            code: `class Greeter {\\n  message: string;\\n  constructor(message: string) {\\n    this.message = message;\\n  }\\n  greet(): void {\\n    console.log(this.message);\\n    console.log('Running Deno version:', Deno.version.deno);\\n  }\\n}\\n\\nconst greeter = new Greeter('Hello, world!');\\ngreeter.greet();`,
+            language: 'deno',
+            outputHistory: [],
+            isPaused: false,
+            lastActivityAt: new Date(),
+            pausedAt: null,
+          };
+        }
+        return this.roomState[roomId];
+      } finally {
+        // Once loading is complete (or failed), remove the promise
+        this.loadingPromises.delete(roomId);
+      }
+    })();
+
+    this.loadingPromises.set(roomId, loadingPromise);
+    return loadingPromise;
   }
 
   async updateRoomActivity(roomId) {
@@ -377,15 +396,18 @@ greeter.greet();`;
   // Code Output Database Methods
   // =========================
   
-  async loadOutputHistoryFromDb(roomId) {
+  async loadOutputHistoryFromDb(roomId, dbRoomId) {
     try {
-      // Get room to ensure it exists and get db id
-      const roomRow = await this.getRoom(roomId);
-      if (!roomRow) return [];
+      // If dbRoomId is not provided, fetch it. This is for backward compatibility or other callers.
+      if (!dbRoomId) {
+        const roomRow = await this.getRoom(roomId);
+        if (!roomRow) return [];
+        dbRoomId = roomRow.id;
+      }
       
       const result = await db.query(
         'SELECT output, exec_time_ms, created_at FROM code_outputs WHERE room_id = $1 ORDER BY created_at ASC',
-        [roomRow.id]
+        [dbRoomId]
       );
       
       return result.rows.map(row => ({
