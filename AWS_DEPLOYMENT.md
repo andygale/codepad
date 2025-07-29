@@ -95,8 +95,10 @@ exit
 AGALE - Piston docker instructions are in the piston directory.  Here is the short version
 time scp -i ta-codecrush-key.pem piston-codecrush-2025-07-20-image.tar ubuntu@35.172.115.130:/home/ubuntu
 time docker load < piston-codecrush-2025-07-20-image.tar
-docker run --privileged -dit -p 2000:2000 --name piston-2025-07-20 piston-2025-07-20
-curl http://localhost:2000/api/v2/runtimes
+docker run --privileged -dit -p 2000:2000 -e PISTON_RUN_TIMEOUT=30000 -e PISTON_COMPILE_TIMEOUT=30000 -e PISTON_COMPILE_CPU_TIME=20000 --name piston-2025-07-20 piston-2025-07-20
+# Make piston auto start in case ec2 instance is restarted
+docker update --restart unless-stopped piston-2025-07-20
+curl http://localhost:2000/api/v2/runtimes;date  (It takes 5-ish minutes for piston to be ready)
 
 troubleshoot by installing netstat tools for this older Debian version named Buster
 echo -e "deb http://archive.debian.org/debian/ buster main\ndeb http://archive.debian.org/debian/ buster-updates main\ndeb http://archive.debian.org/debian-security buster/updates main" > /etc/apt/sources.list
