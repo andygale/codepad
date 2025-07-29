@@ -355,3 +355,11 @@ pg_dump -h your-rds-endpoint -U codecrush codecrush > backup.sql
 # Restore
 psql -h your-rds-endpoint -U codecrush codecrush < backup.sql
 ``` 
+
+AGALE - Setup BlueGreen Deployments
+echo "upstream codecrush_upstream { server codecrush-blue:3001; }" | sudo tee /etc/nginx/upstream.conf
+# For the very first deployment, you'll need to bring up both the blue environment and the nginx service.
+docker-compose -f docker-compose.blue-green.yml up -d codecrush-blue nginx
+
+# After this, you can run the ./deploy-blue-green.sh script for all subsequent deployments. The script will handle deploying to green, switching traffic, and taking blue offline. The next time you run it, it will deploy to blue, switch, and take green offline, and so on.
+# You're now all set for zero-downtime blue-green deployments! Let me know if you have any other questions.
