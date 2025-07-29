@@ -9,9 +9,8 @@ import {
 import axios from 'axios';
 import { Pagination } from 'antd';
 import Room from './Room';
-import GuestJoin from './GuestJoin';
 import { AuthProvider, useAuth } from './AuthContext';
-import HandleRedirect from './HandleRedirect'; // Import the new component
+import HandleRedirect from './HandleRedirect';
 import Instructions from './Instructions';
 import codeCrushLogo from './assets/CodeCrush_logo.jpeg';
 import './App.css';
@@ -41,26 +40,22 @@ function LandingPage() {
   const [restartingRooms, setRestartingRooms] = useState<Set<string>>(new Set());
   const [pausingRooms, setPausingRooms] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
-  const { user, isAuthenticated, login, logout, loading, initializeAuth } = useAuth(); // Updated to use new functions
+  const { user, isAuthenticated, login, logout, loading, initializeAuth } = useAuth();
   const ROOMS_PER_PAGE = 10;
 
   useEffect(() => {
-    // Initialize authentication when landing page loads
     initializeAuth();
   }, [initializeAuth]);
 
   useEffect(() => {
     const fetchRooms = async () => {
       if (!isAuthenticated) return;
-      
       try {
         let url = `${API_URL}/api/rooms?page=${currentPage}&limit=${ROOMS_PER_PAGE}`;
         if (showMyRooms && user?.email) {
           url += `&creatorEmail=${user.email}`;
         }
-        const response = await axios.get<{ rooms: RoomData[], totalCount: number }>(url, {
-          withCredentials: true,
-        });
+        const response = await axios.get<{ rooms: RoomData[], totalCount: number }>(url, { withCredentials: true });
         setRooms(response.data.rooms);
         setTotalRooms(response.data.totalCount);
       } catch (err) {
@@ -73,24 +68,17 @@ function LandingPage() {
 
   const handleCreateRoom = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
     if (!isAuthenticated) {
       setError('You must be logged in to create rooms.');
       return;
     }
-    
     if (!title.trim()) {
       setError('Title cannot be empty.');
       return;
     }
-    
     try {
-      const response = await axios.post<RoomData>(`${API_URL}/api/rooms`, 
-        { title },
-        { withCredentials: true }
-      );
-      const newRoom = response.data;
-      navigate(`/room/${newRoom.room_id}`);
+      const response = await axios.post<RoomData>(`${API_URL}/api/rooms`, { title }, { withCredentials: true });
+      navigate(`/room/${response.data.room_id}`);
     } catch (err) {
       console.error('Error creating room:', err);
       setError('Could not create room. Please try again.');
@@ -98,24 +86,13 @@ function LandingPage() {
   };
 
   const handleRestartRoom = async (roomId: string, e: React.MouseEvent) => {
-    e.preventDefault(); // Prevent navigation to room
+    e.preventDefault();
     e.stopPropagation();
-    
     if (!user) return;
-    
-    setRestartingRooms(prev => new Set([...Array.from(prev), roomId]));
-    
+    setRestartingRooms(prev => new Set(Array.from(prev)).add(roomId));
     try {
       await axios.post(`${API_URL}/api/rooms/${roomId}/unpause`, {}, { withCredentials: true });
-      
-      // Update the room in the local state
-      setRooms(prevRooms => 
-        prevRooms.map(room => 
-          room.room_id === roomId 
-            ? { ...room, is_paused: false, paused_at: undefined }
-            : room
-        )
-      );
+      setRooms(prevRooms => prevRooms.map(room => room.room_id === roomId ? { ...room, is_paused: false, paused_at: undefined } : room));
     } catch (error) {
       console.error('Error restarting room:', error);
       setError('Failed to restart room. Please try again.');
@@ -129,24 +106,13 @@ function LandingPage() {
   };
 
   const handlePauseRoom = async (roomId: string, e: React.MouseEvent) => {
-    e.preventDefault(); // Prevent navigation to room
+    e.preventDefault();
     e.stopPropagation();
-    
     if (!user) return;
-    
-    setPausingRooms(prev => new Set([...Array.from(prev), roomId]));
-    
+    setPausingRooms(prev => new Set(Array.from(prev)).add(roomId));
     try {
       await axios.post(`${API_URL}/api/rooms/${roomId}/pause`, {}, { withCredentials: true });
-      
-      // Update the room in the local state
-      setRooms(prevRooms => 
-        prevRooms.map(room => 
-          room.room_id === roomId 
-            ? { ...room, is_paused: true, paused_at: new Date().toISOString() }
-            : room
-        )
-      );
+      setRooms(prevRooms => prevRooms.map(room => room.room_id === roomId ? { ...room, is_paused: true, paused_at: new Date().toISOString() } : room));
     } catch (error) {
       console.error('Error pausing room:', error);
       setError('Failed to pause room. Please try again.');
@@ -159,9 +125,7 @@ function LandingPage() {
     }
   };
 
-  const canManageRoom = (room: RoomData) => {
-    return isAuthenticated && user;
-  };
+  const canManageRoom = (room: RoomData) => isAuthenticated && user;
 
   const getTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
@@ -169,22 +133,15 @@ function LandingPage() {
     const diffMs = now.getTime() - date.getTime();
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffDays = Math.floor(diffHours / 24);
-    
-    if (diffDays > 0) {
-      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-    } else if (diffHours > 0) {
-      return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    } else {
-      return 'Less than 1 hour ago';
-    }
+    if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffHours > 0) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return 'Less than 1 hour ago';
   };
 
   if (loading) {
     return (
       <div className="landing-page">
-        <header className="app-header">
-          <h1>Loading...</h1>
-        </header>
+        <header className="app-header"><h1>Loading...</h1></header>
       </div>
     );
   }
@@ -213,162 +170,76 @@ function LandingPage() {
           )}
         </div>
       </header>
-      
+
       {!isAuthenticated && (
         <div className="auth-section">
           <h2>Login Required</h2>
           <p>Please sign in to view and create rooms.</p>
           <button onClick={login} className="login-button">Login</button>
           {authError && <p className="error-message">{authError}</p>}
-          <div className="guest-access">
-            <p>Or <Link to="/join" className="guest-link">join an existing room as a guest</Link></p>
-          </div>
         </div>
       )}
-      
+
       {isAuthenticated && (
         <main>
-        <div className="create-room-section">
-          <h2>Create a New Room</h2>
-          <form onSubmit={handleCreateRoom} className="create-room-form">
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                setError('');
-              }}
-              placeholder="Enter room title"
-              aria-label="Room title"
-            />
-            <button type="submit">Create Room</button>
-          </form>
-          {error && <p className="error-message">{error}</p>}
-        </div>
-        <div className="room-list-section">
-          <h2>Or Join an Existing Room</h2>
-          <div className="filter-container">
-            <label>
-              <input
-                type="checkbox"
-                checked={showMyRooms}
-                onChange={(e) => {
-                  setShowMyRooms(e.target.checked);
-                  setCurrentPage(1);
-                }}
-              />
-              Only show my rooms
-            </label>
+          <div className="create-room-section">
+            <h2>Create a New Room</h2>
+            <form onSubmit={handleCreateRoom} className="create-room-form">
+              <input type="text" value={title} onChange={(e) => { setTitle(e.target.value); setError(''); }} placeholder="Enter room title" aria-label="Room title" />
+              <button type="submit">Create Room</button>
+            </form>
+            {error && <p className="error-message">{error}</p>}
           </div>
-          {rooms.length > 0 ? (
-            <div className="room-table-container">
-              <table className="room-table">
-                <thead>
-                  <tr>
-                    <th>Room Title</th>
-                    <th>Creator</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rooms
-                    .filter(room => !showMyRooms || (user && room.creator === user.name))
-                    .map((room) => (
-                    <tr key={room.room_id} className="room-table-row">
-                      <td className="room-title-cell">
-                        <Link to={`/room/${room.room_id}`} className="room-link">
-                          {room.title}
-                        </Link>
-                      </td>
-                      <td className="room-creator-cell">
-                        {room.creator}
-                        {room.creator_email && <div className="creator-email">{room.creator_email}</div>}
-                      </td>
-                      <td className="room-status-cell">
-                        {room.is_paused ? (
-                          <span className="status-paused">
-                            Paused
-                            {room.paused_at && (
-                              <div className="status-detail">
-                                {getTimeAgo(room.paused_at)}
-                              </div>
-                            )}
-                          </span>
-                        ) : (
-                          <span className="status-active">
-                            Active
-                            {room.last_activity_at && (
-                              <div className="status-detail">
-                                Last activity: {getTimeAgo(room.last_activity_at)}
-                              </div>
-                            )}
-                          </span>
-                        )}
-                      </td>
-                      <td className="room-date-cell">
-                        {new Date(room.created_at).toLocaleString()}
-                      </td>
-                      <td className="room-actions-cell">
-                        {canManageRoom(room) && (
-                          room.is_paused ? (
-                            <button
-                              className="restart-button"
-                              onClick={(e) => handleRestartRoom(room.room_id, e)}
-                              disabled={restartingRooms.has(room.room_id)}
-                              style={{
-                                backgroundColor: '#4CAF50',
-                                color: 'white',
-                                border: 'none',
-                                padding: '0.25rem 0.5rem',
-                                borderRadius: '4px',
-                                fontSize: '0.8rem',
-                                cursor: restartingRooms.has(room.room_id) ? 'not-allowed' : 'pointer',
-                                opacity: restartingRooms.has(room.room_id) ? 0.6 : 1
-                              }}
-                            >
-                              {restartingRooms.has(room.room_id) ? 'Restarting...' : 'Restart'}
-                            </button>
-                          ) : (
-                            <button
-                              className="pause-button"
-                              onClick={(e) => handlePauseRoom(room.room_id, e)}
-                              disabled={pausingRooms.has(room.room_id)}
-                              style={{
-                                backgroundColor: '#ff6b6b',
-                                color: 'white',
-                                border: 'none',
-                                padding: '0.25rem 0.5rem',
-                                borderRadius: '4px',
-                                fontSize: '0.8rem',
-                                cursor: pausingRooms.has(room.room_id) ? 'not-allowed' : 'pointer',
-                                opacity: pausingRooms.has(room.room_id) ? 0.6 : 1
-                              }}
-                            >
-                              {pausingRooms.has(room.room_id) ? 'Pausing...' : 'Pause'}
-                            </button>
-                          )
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="pagination-container">
-                <Pagination
-                  current={currentPage}
-                  total={totalRooms}
-                  pageSize={ROOMS_PER_PAGE}
-                  onChange={(page) => setCurrentPage(page)}
-                  showSizeChanger={false}
-                />
-              </div>
+          <div className="room-list-section">
+            <h2>Or Join an Existing Room</h2>
+            <div className="filter-container">
+              <label>
+                <input type="checkbox" checked={showMyRooms} onChange={(e) => { setShowMyRooms(e.target.checked); setCurrentPage(1); }} />
+                Only show my rooms
+              </label>
             </div>
-          ) : (
-            <p>No rooms available. Create one to get started!</p>
-          )}
-        </div>
+            {rooms.length > 0 ? (
+              <div className="room-table-container">
+                <table className="room-table">
+                  <thead>
+                    <tr><th>Room Title</th><th>Creator</th><th>Status</th><th>Created</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {rooms.map((room) => (
+                      <tr key={room.room_id} className="room-table-row">
+                        <td className="room-title-cell"><Link to={`/room/${room.room_id}`} className="room-link">{room.title}</Link></td>
+                        <td className="room-creator-cell">{room.creator}{room.creator_email && <div className="creator-email">{room.creator_email}</div>}</td>
+                        <td className="room-status-cell">
+                          {room.is_paused ? (
+                            <span className="status-paused">Paused{room.paused_at && <div className="status-detail">{getTimeAgo(room.paused_at)}</div>}</span>
+                          ) : (
+                            <span className="status-active">Active{room.last_activity_at && <div className="status-detail">Last activity: {getTimeAgo(room.last_activity_at)}</div>}</span>
+                          )}
+                        </td>
+                        <td className="room-date-cell">{new Date(room.created_at).toLocaleString()}</td>
+                        <td className="room-actions-cell">
+                          {canManageRoom(room) && (
+                            room.is_paused ? (
+                              <button className="restart-button" onClick={(e) => handleRestartRoom(room.room_id, e)} disabled={restartingRooms.has(room.room_id)}>
+                                {restartingRooms.has(room.room_id) ? 'Restarting...' : 'Restart'}
+                              </button>
+                            ) : (
+                              <button className="pause-button" onClick={(e) => handlePauseRoom(room.room_id, e)} disabled={pausingRooms.has(room.room_id)}>
+                                {pausingRooms.has(room.room_id) ? 'Pausing...' : 'Pause'}
+                              </button>
+                            )
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="pagination-container">
+                  <Pagination current={currentPage} total={totalRooms} pageSize={ROOMS_PER_PAGE} onChange={setCurrentPage} showSizeChanger={false} />
+                </div>
+              </div>
+            ) : (<p>No rooms available. Create one to get started!</p>)}
+          </div>
         </main>
       )}
     </div>
@@ -377,22 +248,21 @@ function LandingPage() {
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <Routes>
-          <Route path="/" element={
-            <>
-              <HandleRedirect />
-              <LandingPage />
-            </>
-          } />
-          <Route path="/room/:roomId" element={<Room />} />
-          <Route path="/join" element={<GuestJoin />} />
-          <Route path="/instructions" element={<Instructions />} />
-        </Routes>
-      </AuthProvider>
-    </Router>
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/room/:roomId" element={<Room />} />
+      <Route path="/handleRedirect" element={<HandleRedirect />} />
+      <Route path="/instructions" element={<Instructions />} />
+    </Routes>
   );
 }
 
-export default App;
+const AppWrapper = () => (
+  <Router>
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  </Router>
+);
+
+export default AppWrapper;
