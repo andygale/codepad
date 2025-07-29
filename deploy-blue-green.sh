@@ -100,3 +100,8 @@ echo "   docker-compose -f $DOCKER_COMPOSE_FILE stop codecrush-$ACTIVE_COLOR"
 # docker-compose -f "$DOCKER_COMPOSE_FILE" rm -f "codecrush-$ACTIVE_COLOR"
 
 echo "🎉 Blue-Green deployment complete! $INACTIVE_COLOR is now live." 
+echo
+echo "Emergency switch-back instructions: (one of the first two)"
+echo "echo \"upstream codecrush_upstream { server codecrush-blue:3001; }\" | sudo tee /etc/nginx/upstream.conf"
+echo "echo \"upstream codecrush_upstream { server codecrush-green:3002; }\" | sudo tee /etc/nginx/upstream.conf"
+echo "sudo docker-compose -f docker-compose.blue-green.yml exec nginx nginx -s reload"
