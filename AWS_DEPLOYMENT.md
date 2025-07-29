@@ -363,3 +363,8 @@ docker-compose -f docker-compose.blue-green.yml up -d codecrush-blue nginx
 
 # After this, you can run the ./deploy-blue-green.sh script for all subsequent deployments. The script will handle deploying to green, switching traffic, and taking blue offline. The next time you run it, it will deploy to blue, switch, and take green offline, and so on.
 # You're now all set for zero-downtime blue-green deployments! Let me know if you have any other questions.
+
+# Emergency switch-back
+echo "upstream codecrush_upstream { server codecrush-blue:3001; }" | sudo tee /etc/nginx/upstream.conf
+echo "upstream codecrush_upstream { server codecrush-green:3002; }" | sudo tee /etc/nginx/upstream.conf
+sudo docker-compose -f docker-compose.blue-green.yml exec nginx nginx -s reload
