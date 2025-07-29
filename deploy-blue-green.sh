@@ -22,15 +22,49 @@ get_active_color() {
 switch_to_color() {
     local color=$1
     echo "Switching NGINX to $color..."
+    
+    # Create the new upstream configuration
     if [ "$color" == "blue" ]; then
-        echo "upstream codecrush_upstream { server codecrush-blue:3001; }" > nginx_upstream_temp.conf
+        NEW_UPSTREAM="upstream codecrush_upstream { server codecrush-blue:3001; }"
     else
-        echo "upstream codecrush_upstream { server codecrush-green:3002; }" > nginx_upstream_temp.conf
+        NEW_UPSTREAM="upstream codecrush_upstream { server codecrush-green:3002; }"
     fi
-    # Use sudo to update the config in /etc/nginx
+    
+    # Method 1: Update host file (for persistence)
+    echo "$NEW_UPSTREAM" > nginx_upstream_temp.conf
     sudo mv nginx_upstream_temp.conf "$NGINX_UPSTREAM_CONFIG"
-    # Reload NGINX to apply changes without downtime
-    sudo docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx nginx -s reload
+    
+    # Method 2: Update directly in nginx container (for immediate effect)
+    echo "Updating nginx container configuration..."
+    sudo docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx sh -c "echo '$NEW_UPSTREAM' > /etc/nginx/upstream.conf"
+    
+    # Verify the configuration syntax
+    echo "Testing nginx configuration..."
+    if ! sudo docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx nginx -t; then
+        echo "❌ Nginx configuration test failed!"
+        return 1
+    fi
+    
+    # Reload nginx gracefully
+    echo "Reloading nginx configuration..."
+    if sudo docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx nginx -s reload; then
+        echo "✅ Nginx reloaded successfully"
+    else
+        echo "❌ Nginx reload failed!"
+        return 1
+    fi
+    
+    # Verify the change took effect
+    echo "Verifying configuration change..."
+    CURRENT_CONFIG=$(sudo docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx cat /etc/nginx/upstream.conf)
+    echo "Current nginx config: $CURRENT_CONFIG"
+    
+    if echo "$CURRENT_CONFIG" | grep -q "$color"; then
+        echo "✅ Successfully switched to $color"
+    else
+        echo "❌ Failed to switch to $color"
+        return 1
+    fi
 }
 
 # --- Main Deployment Logic ---
