@@ -79,10 +79,10 @@ fi
 
 # 5. Run database migrations (only once from one of the services)
 echo "📦 Running database migrations..."
-# We use --no-entrypoint to prevent the container's default entrypoint script from running,
-# as it also tries to run migrations, causing a conflict.
-# We run the command from the root of the app directory inside the container.
-docker-compose -f "$DOCKER_COMPOSE_FILE" run --rm --no-entrypoint "codecrush-$INACTIVE_COLOR" yarn db:migrate
+# We use --entrypoint "" to override the container's default entrypoint script,
+# which is compatible with older versions of docker-compose.
+# This prevents the container's default script from running migrations, avoiding a conflict.
+docker-compose -f "$DOCKER_COMPOSE_FILE" run --rm --entrypoint "" "codecrush-$INACTIVE_COLOR" yarn db:migrate
 
 # 6. Switch NGINX to the new environment
 switch_to_color "$INACTIVE_COLOR"
