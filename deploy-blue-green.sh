@@ -55,7 +55,7 @@ git pull origin main
 
 # 3. Build and start the new (inactive) environment
 echo "🏗️ Building and starting $INACTIVE_COLOR environment..."
-docker-compose -f "$DOCKER_COMPOSE_FILE" build "codecrush-$INACTIVE_COLOR"
+time docker-compose -f "$DOCKER_COMPOSE_FILE" build "codecrush-$INACTIVE_COLOR"
 docker-compose -f "$DOCKER_COMPOSE_FILE" up -d --no-deps "codecrush-$INACTIVE_COLOR"
 
 # 4. Wait for the new container to be healthy
@@ -79,7 +79,10 @@ fi
 
 # 5. Run database migrations (only once from one of the services)
 echo "📦 Running database migrations..."
-docker-compose -f "$DOCKER_COMPOSE_FILE" run --rm "codecrush-$INACTIVE_COLOR" yarn --cwd server db:migrate
+# We use --no-entrypoint to prevent the container's default entrypoint script from running,
+# as it also tries to run migrations, causing a conflict.
+# We run the command from the root of the app directory inside the container.
+docker-compose -f "$DOCKER_COMPOSE_FILE" run --rm --no-entrypoint "codecrush-$INACTIVE_COLOR" yarn db:migrate
 
 # 6. Switch NGINX to the new environment
 switch_to_color "$INACTIVE_COLOR"
