@@ -196,13 +196,13 @@ class LSPProxy {
     if (!fs.existsSync(roomWorkspaceDir)) {
         fs.mkdirSync(roomWorkspaceDir, { recursive: true });
         workspaceCreated = true;
-        
-        // Create proper project structure for Kotlin
-        if (language === 'kotlin') {
-          console.log(`[${new Date().toISOString()}] [LSP Proxy] Initializing Kotlin project structure for room ${roomId}`);
-          await this.initializeKotlinProject(roomWorkspaceDir);
-          console.log(`[${new Date().toISOString()}] [LSP Proxy] Kotlin project structure created for room ${roomId}`);
-        }
+    }
+    
+    // Always initialize Kotlin project structure to ensure latest fixes are applied
+    if (language === 'kotlin') {
+      console.log(`[${new Date().toISOString()}] [LSP Proxy] Initializing Kotlin project structure for room ${roomId}`);
+      await this.initializeKotlinProject(roomWorkspaceDir);
+      console.log(`[${new Date().toISOString()}] [LSP Proxy] Kotlin project structure created for room ${roomId}`);
     }
 
     // For Kotlin, always ensure coroutines are in Gradle cache (even for reused workspaces)
@@ -324,24 +324,21 @@ repositories {
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2")
 }
 
 // Force Gradle to download dependencies
 configurations.all {
-    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
-    resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
+    resolutionStrategy.cacheChangingModulesFor(0, "seconds")
+    resolutionStrategy.cacheDynamicVersionsFor(0, "seconds")
 }`;
 
     const buildGradlePath = path.join(projectDir, 'build.gradle.kts');
-    if (!fs.existsSync(buildGradlePath)) {
-      fs.writeFileSync(buildGradlePath, buildGradleContent);
-    }
+    // Always write the build.gradle.kts file to ensure latest fixes are applied
+    fs.writeFileSync(buildGradlePath, buildGradleContent);
 
     // Create gradle.properties to help with dependency resolution
     const gradlePropsPath = path.join(projectDir, 'gradle.properties');
-    if (!fs.existsSync(gradlePropsPath)) {
-      const gradlePropsContent = `
+    const gradlePropsContent = `
 # Enable Gradle daemon for faster builds
 org.gradle.daemon=true
 # Enable parallel execution
@@ -351,8 +348,8 @@ org.gradle.configuration-cache=true
 # Use Kotlin incremental compilation
 kotlin.incremental=true
 `;
-      fs.writeFileSync(gradlePropsPath, gradlePropsContent);
-    }
+    // Always write the gradle.properties file to ensure latest configuration
+    fs.writeFileSync(gradlePropsPath, gradlePropsContent);
 
     // Pre-download coroutines JAR to Gradle cache to ensure it's available
     await this.ensureCoroutinesInGradleCache(projectDir);
@@ -375,15 +372,15 @@ kotlin.incremental=true
       const homeDir = require('os').homedir();
       const gradleCacheDir = path.join(homeDir, '.gradle', 'caches', 'modules-2', 'files-2.1', 'org.jetbrains.kotlinx');
       
-      // Ensure both coroutines variants are cached
+      // Ensure coroutines core is cached (JVM support is included in the main artifact)
       const coroutinesVariants = [
-        'kotlinx-coroutines-core/1.10.2/kotlinx-coroutines-core-1.10.2.jar',
-        'kotlinx-coroutines-core-jvm/1.10.2/kotlinx-coroutines-core-jvm-1.10.2.jar'
+        'kotlinx-coroutines-core/1.10.2/kotlinx-coroutines-core-1.10.2.jar'
       ];
       
       for (const variant of coroutinesVariants) {
-        const cacheDir = path.join(gradleCacheDir, variant.split('/')[0], '1.10.2');
-        const cachedJarPath = path.join(cacheDir, variant.split('/').pop());
+        const [artifactName, version, jarName] = variant.split('/');
+        const cacheDir = path.join(gradleCacheDir, artifactName, version);
+        const cachedJarPath = path.join(cacheDir, jarName);
         
         if (!fs.existsSync(cachedJarPath)) {
           console.log(`[${new Date().toISOString()}] [LSP Proxy] Downloading ${variant} to Gradle cache`);
@@ -395,7 +392,7 @@ kotlin.incremental=true
           
           // Download from Maven Central
           const axios = (await import('../server/node_modules/axios/index.js')).default;
-          const mavenUrl = `https://repo1.maven.org/maven2/org/jetbrains/kotlinx/${variant.replace('/', '/1.10.2/')}`;
+          const mavenUrl = `https://repo1.maven.org/maven2/org/jetbrains/kotlinx/${artifactName}/${version}/${jarName}`;
           
           try {
             const response = await axios({ method: 'get', url: mavenUrl, responseType: 'stream' });

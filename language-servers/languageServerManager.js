@@ -91,8 +91,8 @@ class LanguageServerManager {
   async ensureKotlinCoroutinesJar(config) {
     try {
       const desiredVersion = '1.10.2';
-      const jarName = `kotlinx-coroutines-core-jvm-${desiredVersion}.jar`;
-      const altJarName = `kotlinx-coroutines-core-${desiredVersion}.jar`; // some launch scripts expect this name
+      const jarName = `kotlinx-coroutines-core-${desiredVersion}.jar`;
+      const altJarName = `kotlinx-coroutines-core-jvm-${desiredVersion}.jar`; // some launch scripts expect this name
       const libDir = path.join(config.serverDir, 'server', 'lib');
 
       if (!fs.existsSync(libDir)) {
@@ -104,7 +104,7 @@ class LanguageServerManager {
       // Remove any outdated coroutine jars to avoid duplicate classes
       const existing = fs.readdirSync(libDir).filter(f => (f.startsWith('kotlinx-coroutines-core-jvm-') || f.startsWith('kotlinx-coroutines-core-')) && f.endsWith('.jar'));
       for (const f of existing) {
-        if (f !== jarName) {
+        if (f !== jarName && f !== altJarName) {
           fs.rmSync(path.join(libDir, f));
           console.log(`[LS Manager] Removed outdated ${f}`);
         }
@@ -115,7 +115,7 @@ class LanguageServerManager {
       if (!fs.existsSync(targetPath)) {
         console.log(`[LS Manager] Downloading ${jarName} for coroutine IntelliSense support...`);
         const axios = (await import('../server/node_modules/axios/index.js')).default;
-        const url = `https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/${desiredVersion}/${jarName}`;
+        const url = `https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core/${desiredVersion}/${jarName}`;
         const resp = await axios({ method: 'get', url, responseType: 'stream' });
         await new Promise((resolve, reject) => {
           const writer = fs.createWriteStream(targetPath);
@@ -127,7 +127,7 @@ class LanguageServerManager {
         console.log(`[LS Manager] Added ${jarName} to LS lib`);
       }
 
-      // Ensure an alternative file name without the "-jvm" classifier exists as some KLS launch scripts
+      // Ensure an alternative file name with the "-jvm" classifier exists as some KLS launch scripts
       // still hard-code that pattern. Keep a hard link/copy to avoid doubling disk usage.
       try {
         const altPath = path.join(libDir, altJarName);
