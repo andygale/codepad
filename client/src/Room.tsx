@@ -464,6 +464,13 @@ function Room() {
       return;
     }
 
+    // SECURITY: Do not initialize LSP for paused rooms
+    if (isPaused) {
+      console.log('[Room] LSP initialization skipped - room is paused');
+      setLspStatus('disconnected');
+      return;
+    }
+
     // Only enable LSP for supported languages
     if (!['kotlin', 'java', 'python'].includes(language)) {
       console.log(`[Room] LSP not supported for language: ${language}`);
@@ -519,7 +526,7 @@ function Room() {
       console.error('[Room] LSP initialization error:', error);
       setLspStatus('error');
     }
-  }, [language, roomId, editorReady, lspEnabled]);
+  }, [language, roomId, editorReady, lspEnabled, isPaused]);
 
   useEffect(() => {
     console.log(`[Room] useEffect triggered for LSP initialization - language: ${language}, roomId: ${roomId}, editor: ${!!editorRef.current}, socket: ${!!socketRef.current}, editorReady: ${editorReady}`);
@@ -847,6 +854,22 @@ function Room() {
     }
   }, [isPaused]);
 
+  // SECURITY: Disconnect LSP when room becomes paused
+  useEffect(() => {
+    if (isPaused && lspClientRef.current) {
+      console.log('[Room] Room paused - disconnecting LSP for security');
+      lspClientRef.current.disconnect();
+      lspClientRef.current = null;
+      setLspStatus('disconnected');
+      
+      // Clear any LSP markers
+      if (monacoRef.current && editorRef.current) {
+        const model = editorRef.current.getModel();
+        monacoRef.current.editor.setModelMarkers(model, 'lsp', []);
+      }
+    }
+  }, [isPaused]);
+
   const getUserColor = useCallback((socketId: string) => {
     const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
     const users = usersRef.current;
@@ -1047,35 +1070,37 @@ function Room() {
               </select>
               {(['kotlin', 'java', 'python'].includes(language)) && (
                 <div 
-                  onClick={toggleLSP}
-                  onMouseEnter={(e) => {
+                  onClick={isPaused ? undefined : toggleLSP}
+                  onMouseEnter={!isPaused ? (e) => {
                     e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
                     e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                  }}
-                  onMouseLeave={(e) => {
+                  } : undefined}
+                  onMouseLeave={!isPaused ? (e) => {
                     e.currentTarget.style.backgroundColor = 'transparent';
                     e.currentTarget.style.borderColor = 'transparent';
-                  }}
+                  } : undefined}
                   style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
                   gap: '4px',
                   fontSize: '12px',
-                  color: !lspEnabled ? '#9E9E9E' : (lspStatus === 'connected' ? '#4CAF50' : (lspStatus === 'connecting' ? '#FF9800' : '#FF5722')),
-                  cursor: 'pointer',
+                  color: isPaused ? '#757575' : (!lspEnabled ? '#9E9E9E' : (lspStatus === 'connected' ? '#4CAF50' : (lspStatus === 'connecting' ? '#FF9800' : '#FF5722'))),
+                  cursor: isPaused ? 'not-allowed' : 'pointer',
                   userSelect: 'none',
                   padding: '4px 8px',
                   borderRadius: '4px',
                   border: '1px solid transparent',
-                  transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  opacity: isPaused ? 0.5 : 1
                 }}>
                   <div style={{ 
-                    width: '8px', 
-                    height: '8px', 
-                    borderRadius: '50%', 
-                    backgroundColor: !lspEnabled ? '#9E9E9E' : (lspStatus === 'connected' ? '#4CAF50' : (lspStatus === 'connecting' ? '#FF9800' : '#FF5722'))
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    backgroundColor: isPaused ? '#757575' : (!lspEnabled ? '#9E9E9E' : (lspStatus === 'connected' ? '#4CAF50' : (lspStatus === 'connecting' ? '#FF9800' : '#FF5722'))),
+                    animation: isPaused ? 'none' : (lspStatus === 'connecting' ? 'pulse 1s infinite' : 'none')
                   }} />
-                  IntelliSense {!lspEnabled ? 'Off' : (lspStatus === 'connected' ? 'On' : (lspStatus === 'connecting' ? 'Loading...' : 'Failed'))}
+                  IntelliSense {isPaused ? 'Disabled (Paused)' : (!lspEnabled ? 'Off' : (lspStatus === 'connected' ? 'On' : (lspStatus === 'connecting' ? 'Loading...' : 'Failed')))}
                 </div>
               )}
             </div>

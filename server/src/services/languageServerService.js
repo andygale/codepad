@@ -1,5 +1,6 @@
 const LanguageServerManager = require('../../../language-servers/languageServerManager');
 const LSPProxy = require('../../../language-servers/lspProxy');
+const roomService = require('./roomService');
 
 class LanguageServerService {
   constructor() {
@@ -20,6 +21,20 @@ class LanguageServerService {
       if (!language || !roomId) {
         console.error(`[${new Date().toISOString()}] [LSP] Missing required parameters - language: ${language}, roomId: ${roomId}`);
         socket.emit('lsp-error', { error: 'Language and roomId are required' });
+        return;
+      }
+
+      // SECURITY: Check if room is paused before allowing LSP connection
+      try {
+        const isPaused = await roomService.checkRoomPauseStatus(roomId);
+        if (isPaused) {
+          console.log(`[${new Date().toISOString()}] [LSP] Connection denied - room ${roomId} is paused`);
+          socket.emit('lsp-error', { error: 'IntelliSense is disabled for paused rooms' });
+          return;
+        }
+      } catch (error) {
+        console.error(`[${new Date().toISOString()}] [LSP] Error checking room pause status:`, error);
+        socket.emit('lsp-error', { error: 'Failed to verify room status' });
         return;
       }
 
