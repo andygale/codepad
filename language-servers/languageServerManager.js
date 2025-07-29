@@ -208,7 +208,7 @@ class LanguageServerManager {
     console.log(`[LS Manager] Gradle ${gradleVersion} installed`);
   }
 
-  getLanguageServerArgs(language) {
+  getLanguageServerArgs(language, roomId = null) {
     const config = this.serverConfigs[language];
     
     if (language === 'kotlin') {
@@ -251,15 +251,15 @@ class LanguageServerManager {
         configPath = writableConfigPath;
       }
       
-      // Use writable workspace directory
-      const workspacePath = '/tmp/jdt-workspace';
+      // Use writable workspace directory - make it unique per room to avoid conflicts
+      const workspacePath = roomId ? `/tmp/jdt-workspace-${roomId}` : '/tmp/jdt-workspace';
       
       return [
         '-Declipse.application=org.eclipse.jdt.ls.core.id1',
         '-Dosgi.bundles.defaultStartLevel=4',
         '-Declipse.product=org.eclipse.jdt.ls.core.product',
         '-Dlog.level=ALL',
-        '-noverify',
+        // Removed deprecated -noverify flag (deprecated in JDK 13+)
         '-Xmx1G',
         '-jar',
         launcherPath,
@@ -298,7 +298,7 @@ class LanguageServerManager {
     
     // Ensure workspace directory exists for Java
     if (language === 'java') {
-      const workspaceDir = '/tmp/jdt-workspace';
+      const workspaceDir = roomId ? `/tmp/jdt-workspace-${roomId}` : '/tmp/jdt-workspace';
       if (!fs.existsSync(workspaceDir)) {
         fs.mkdirSync(workspaceDir, { recursive: true });
         console.log(`[LS Manager] Created workspace directory: ${workspaceDir}`);
@@ -312,7 +312,7 @@ class LanguageServerManager {
     }
 
     // Get the correct args for the language server
-    const args = this.getLanguageServerArgs(language);
+    const args = this.getLanguageServerArgs(language, roomId);
     const cwd = language === 'kotlin' ? path.join(config.serverDir, 'server') : config.serverDir;
     
     console.log(`[LS Manager] Command: ${config.command}`);
