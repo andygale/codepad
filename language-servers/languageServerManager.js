@@ -101,71 +101,112 @@ class LanguageServerManager {
         return;
       }
 
-      // Remove any outdated coroutine jars to avoid duplicate classes
-      const existing = fs.readdirSync(libDir).filter(f => (f.startsWith('kotlinx-coroutines-core-jvm-') || f.startsWith('kotlinx-coroutines-core-')) && f.endsWith('.jar'));
-      for (const f of existing) {
-        if (f !== jarName && f !== altJarName) {
-          fs.rmSync(path.join(libDir, f));
-          console.log(`[LS Manager] Removed outdated ${f}`);
-        }
+      const targetPath = path.join(libDir, jarName);
+      const altTargetPath = path.join(libDir, altJarName);
+      
+      // Check if coroutines JARs already exist (they should from build time)
+      const mainJarExists = fs.existsSync(targetPath);
+      const altJarExists = fs.existsSync(altTargetPath);
+      
+      if (mainJarExists && altJarExists) {
+        console.log(`[LS Manager] Coroutines JARs already present in lib directory`);
+        // Still ensure Maven repo has it
+        await this.ensureMavenRepo(targetPath, desiredVersion, jarName);
+        return;
       }
 
-      const targetPath = path.join(libDir, jarName);
+      // Only try to download/write if JARs are missing (should not happen in production Docker)
+      console.log(`[LS Manager] Coroutines JARs missing from lib directory, attempting to install...`);
+      
+      // Check write permissions first
+      try {
+        const testFile = path.join(libDir, '.write-test');
+        fs.writeFileSync(testFile, 'test');
+        fs.unlinkSync(testFile);
+      } catch (permError) {
+        console.error(`[LS Manager] No write permission to lib directory: ${libDir}`);
+        console.error(`[LS Manager] This is expected in Docker - coroutines should be installed during build`);
+        return; // Gracefully fail rather than crash the language server
+      }
+
+      // Remove any outdated coroutine jars to avoid duplicate classes
+      try {
+        const existing = fs.readdirSync(libDir).filter(f => (f.startsWith('kotlinx-coroutines-core-jvm-') || f.startsWith('kotlinx-coroutines-core-')) && f.endsWith('.jar'));
+        for (const f of existing) {
+          if (f !== jarName && f !== altJarName) {
+            fs.rmSync(path.join(libDir, f));
+            console.log(`[LS Manager] Removed outdated ${f}`);
+          }
+        }
+      } catch (cleanupError) {
+        console.warn(`[LS Manager] Could not clean up old coroutines JARs: ${cleanupError.message}`);
+      }
+
       let downloaded = false;
-      if (!fs.existsSync(targetPath)) {
-        console.log(`[LS Manager] Downloading ${jarName} for coroutine IntelliSense support...`);
-        const axios = (await import('../server/node_modules/axios/index.js')).default;
-        const url = `https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core/${desiredVersion}/${jarName}`;
-        const resp = await axios({ method: 'get', url, responseType: 'stream' });
-        await new Promise((resolve, reject) => {
-          const writer = fs.createWriteStream(targetPath);
-          resp.data.pipe(writer);
-          writer.on('finish', resolve);
-          writer.on('error', reject);
-        });
-        downloaded = true;
-        console.log(`[LS Manager] Added ${jarName} to LS lib`);
+      if (!mainJarExists) {
+        try {
+          console.log(`[LS Manager] Downloading ${jarName} for coroutine IntelliSense support...`);
+          const axios = (await import('../server/node_modules/axios/index.js')).default;
+          const url = `https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core/${desiredVersion}/${jarName}`;
+          const resp = await axios({ method: 'get', url, responseType: 'stream' });
+          await new Promise((resolve, reject) => {
+            const writer = fs.createWriteStream(targetPath);
+            resp.data.pipe(writer);
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+          });
+          downloaded = true;
+          console.log(`[LS Manager] Added ${jarName} to LS lib`);
+        } catch (downloadError) {
+          console.error(`[LS Manager] Failed to download coroutines JAR: ${downloadError.message}`);
+          return; // Don't proceed if download failed
+        }
       }
 
       // Ensure an alternative file name with the "-jvm" classifier exists as some KLS launch scripts
       // still hard-code that pattern. Keep a hard link/copy to avoid doubling disk usage.
-      try {
-        const altPath = path.join(libDir, altJarName);
-        if (!fs.existsSync(altPath)) {
+      if (!altJarExists) {
+        try {
           // Use a hard link when possible, fall back to a normal copy otherwise
           try {
-            fs.linkSync(targetPath, altPath);
+            fs.linkSync(targetPath, altTargetPath);
           } catch {
-            fs.copyFileSync(targetPath, altPath);
+            fs.copyFileSync(targetPath, altTargetPath);
           }
           console.log(`[LS Manager] Added alias ${altJarName} → ${jarName}`);
+        } catch (err) {
+          console.warn('[LS Manager] Unable to create alt coroutines jar', err.message);
         }
-      } catch (err) {
-        console.warn('[LS Manager] Unable to create alt coroutines jar', err);
       }
 
       // Also place the jar in local Maven repository so that the LS can find it when Gradle is absent.
-      try {
-        const homeDir = require('os').homedir();
-        const mavenDir = path.join(homeDir, '.m2', 'repository', 'org', 'jetbrains', 'kotlinx', 'kotlinx-coroutines-core-jvm', desiredVersion);
-        const mavenJarPath = path.join(mavenDir, jarName);
-        if (!fs.existsSync(mavenJarPath)) {
-          if (!fs.existsSync(mavenDir)) {
-            fs.mkdirSync(mavenDir, { recursive: true });
-          }
-          fs.copyFileSync(targetPath, mavenJarPath);
-          console.log(`[LS Manager] Copied ${jarName} to local Maven repo`);
-        }
-      } catch (err) {
-        console.warn('[LS Manager] Could not copy coroutines jar to Maven repo', err);
-      }
+      await this.ensureMavenRepo(targetPath, desiredVersion, jarName);
 
       if (downloaded) {
         console.log(`[LS Manager] kotlinx-coroutines ${desiredVersion} ready`);
       }
 
     } catch (err) {
-      console.error('[LS Manager] Failed to set up kotlinx-coroutines jar', err);
+      console.error('[LS Manager] Failed to set up kotlinx-coroutines jar', err.message);
+      // Don't throw - allow language server to start even if coroutines setup fails
+    }
+  }
+  
+  // Helper method to ensure coroutines JAR is in Maven repo
+  async ensureMavenRepo(targetPath, desiredVersion, jarName) {
+    try {
+      const homeDir = require('os').homedir();
+      const mavenDir = path.join(homeDir, '.m2', 'repository', 'org', 'jetbrains', 'kotlinx', 'kotlinx-coroutines-core-jvm', desiredVersion);
+      const mavenJarPath = path.join(mavenDir, jarName);
+      if (!fs.existsSync(mavenJarPath)) {
+        if (!fs.existsSync(mavenDir)) {
+          fs.mkdirSync(mavenDir, { recursive: true });
+        }
+        fs.copyFileSync(targetPath, mavenJarPath);
+        console.log(`[LS Manager] Copied ${jarName} to local Maven repo`);
+      }
+    } catch (err) {
+      console.warn('[LS Manager] Could not copy coroutines jar to Maven repo', err.message);
     }
   }
 
@@ -307,8 +348,17 @@ class LanguageServerManager {
     
     // For Kotlin ensure coroutines jar exists even if LS was previously installed
     if (language === 'kotlin') {
+      console.log(`[LS Manager] Setting up Kotlin language server for ${serverKey}`);
+      
+      // Check if coroutines JARs exist in lib directory
+      const libDir = path.join(config.serverDir, 'server', 'lib');
+      const coroutinesFiles = fs.readdirSync(libDir).filter(f => f.includes('coroutines'));
+      console.log(`[LS Manager] Found coroutines JARs in lib: ${coroutinesFiles.join(', ')}`);
+      
       await this.ensureKotlinCoroutinesJar(config);
       await this.ensureGradleAvailable();
+      
+      console.log(`[LS Manager] Kotlin setup completed for ${serverKey}`);
     }
 
     // Get the correct args for the language server

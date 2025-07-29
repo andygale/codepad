@@ -34,6 +34,12 @@ COPY . .
 # This ensures we download the correct architecture and don't overwrite it.
 RUN node language-servers/install.js
 
+# Verify that coroutines JARs were installed properly
+RUN echo "🔍 Verifying language server installations..." && \
+    ls -la language-servers/kotlin-language-server/server/lib/*coroutines* || \
+    (echo "❌ ERROR: Kotlin coroutines JARs not found in language server lib directory" && exit 1) && \
+    echo "✅ Kotlin coroutines JARs verified"
+
 # Build the application
 # The ARG values are automatically available as environment variables during this step
 RUN yarn docker:build
