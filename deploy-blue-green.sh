@@ -89,6 +89,8 @@ git pull origin main
 
 # 3. Build and start the new (inactive) environment
 echo "🏗️ Building and starting $INACTIVE_COLOR environment..."
+# Use plain progress for cleaner output
+export BUILDKIT_PROGRESS=plain
 time docker-compose -f "$DOCKER_COMPOSE_FILE" build "codecrush-$INACTIVE_COLOR"
 docker-compose -f "$DOCKER_COMPOSE_FILE" up -d --no-deps "codecrush-$INACTIVE_COLOR"
 
