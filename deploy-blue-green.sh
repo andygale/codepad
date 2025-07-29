@@ -60,13 +60,22 @@ docker-compose -f "$DOCKER_COMPOSE_FILE" up -d --no-deps "codecrush-$INACTIVE_CO
 
 # 4. Wait for the new container to be healthy
 echo "⏳ Waiting for $INACTIVE_COLOR to become healthy..."
-# Implement a more robust health check loop
+HEALTH_STATUS=""
 for i in {1..10}; do
-    HEALTH_STATUS=$(docker-compose -f "$DOCKER_COMPOSE_FILE" ps "codecrush-$INACTIVE_COLOR" | grep 'healthy')
-    if [ -n "$HEALTH_STATUS" ]; then
+    # Check for a healthy state. `grep -q` is used to check quietly.
+    if docker-compose -f "$DOCKER_COMPOSE_FILE" ps "codecrush-$INACTIVE_COLOR" | grep -q '(healthy)'; then
         echo "✅ $INACTIVE_COLOR is healthy!"
+        HEALTH_STATUS="healthy"
         break
     fi
+
+    # Check for an unhealthy state to fail fast.
+    if docker-compose -f "$DOCKER_COMPOSE_FILE" ps "codecrush-$INACTIVE_COLOR" | grep -q '(unhealthy)'; then
+        echo "❌ $INACTIVE_COLOR has become unhealthy. Aborting deployment."
+        docker-compose -f "$DOCKER_COMPOSE_FILE" logs "codecrush-$INACTIVE_COLOR"
+        exit 1
+    fi
+
     echo "Attempt $i: $INACTIVE_COLOR is not healthy yet. Retrying in 15 seconds..."
     sleep 15
 done
