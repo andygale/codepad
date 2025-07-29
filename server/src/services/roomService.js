@@ -306,6 +306,10 @@ greeter.greet();`;
     return this.roomState[roomId].outputHistory;
   }
 
+  getRoomState(roomId) {
+    return this.roomState[roomId] || null;
+  }
+
   addUserToRoom(roomId, socketId, name) {
     if (!this.userNames[roomId]) this.userNames[roomId] = {};
     this.userNames[roomId][socketId] = { name: name || 'Anonymous', id: socketId };

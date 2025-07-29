@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import MonacoEditor from '@monaco-editor/react';
 import { io, Socket } from 'socket.io-client';
 import axios from 'axios';
@@ -121,6 +121,59 @@ function Room() {
     activeTabRef.current = activeTab;
   }, [activeTab]);
 
+  // Navigation state for blocking
+  const [isSaving, setIsSaving] = useState(false);
+  const navigate = useNavigate();
+  
+  // Save code with Promise support for blocking navigation
+  const saveCodeWithPromise = useCallback(async (): Promise<boolean> => {
+    if (!socketRef.current || !roomId || !editorRef.current) return false;
+    
+    const currentCode = editorRef.current.getValue();
+    const validation = validateCodeSize(currentCode);
+    
+    if (!validation.isValid) return false;
+
+    console.log('Performing save before navigation...');
+    setIsSaving(true);
+
+    // Save to localStorage as immediate backup
+    localStorage.setItem(`room_${roomId}_code_backup`, currentCode);
+    localStorage.setItem(`room_${roomId}_code_backup_timestamp`, Date.now().toString());
+
+    // Send save request and wait briefly for it to be sent
+    socketRef.current.emit('saveCode', { room: roomId, code: currentCode });
+
+    // Clear any pending debounced save
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+      debounceTimeoutRef.current = null;
+    }
+
+    // Wait a short time to ensure the message is sent before navigation
+    await new Promise(resolve => setTimeout(resolve, 300));
+    setIsSaving(false);
+    return true;
+  }, [roomId]);
+
+  // Immediate save function (bypasses debounce for critical saves)
+  const saveCodeImmediately = useCallback(() => {
+    if (!socketRef.current || !roomId || !editorRef.current) return;
+    
+    const currentCode = editorRef.current.getValue();
+    const validation = validateCodeSize(currentCode);
+    
+    if (validation.isValid) {
+      console.log('Performing immediate code save...');
+      socketRef.current.emit('saveCode', { room: roomId, code: currentCode });
+      // Clear any pending debounced save
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+        debounceTimeoutRef.current = null;
+      }
+    }
+  }, [roomId]);
+
   const languageExamples: Record<string, string> = {
     javascript: `console.log('Hello, world!');\nconsole.log('Running Node.js version:', process.version);`,
     typescript: `class Greeter {\n  message: string;\n  constructor(message: string) {\n    this.message = message;\n  }\n  greet(): void {\n    console.log(this.message);\n    // TypeScript compiles to JavaScript and runs on Node.js\n    console.log('Running Node.js version:', (globalThis as any).process?.version || 'unknown');\n  }\n}\n\nconst greeter = new Greeter('Hello, world!');\ngreeter.greet();`,
@@ -231,6 +284,44 @@ function Room() {
 
     socket.on('codeUpdate', ({ code }) => {
       if (editorRef.current && editorRef.current.getValue() !== code) {
+        // Check if we have a newer backup in localStorage
+        const backup = localStorage.getItem(`room_${roomId}_code_backup`);
+        const backupTimestamp = localStorage.getItem(`room_${roomId}_code_backup_timestamp`);
+        
+        if (backup && backupTimestamp) {
+          const backupTime = parseInt(backupTimestamp);
+          const timeDiff = Date.now() - backupTime;
+          
+          // If backup is less than 30 seconds old and different from server code, use backup
+          if (timeDiff < 30000 && backup !== code && backup.trim().length > 0) {
+            console.log('Restoring code from localStorage backup');
+            isRemoteUpdate.current = true;
+            editorRef.current.setValue(backup);
+            isRemoteUpdate.current = false;
+            
+            // Save the restored code to server
+            socketRef.current?.emit('saveCode', { room: roomId, code: backup });
+            
+            // Clear the backup after restoration
+            localStorage.removeItem(`room_${roomId}_code_backup`);
+            localStorage.removeItem(`room_${roomId}_code_backup_timestamp`);
+            
+            // Update code size tracking for restored code
+            const validation = validateCodeSize(backup);
+            setCodeSize(validation.sizeBytes);
+            if (!validation.isValid) {
+              setCodeSizeError(validation.error || 'Code size validation failed');
+            } else {
+              setCodeSizeError(null);
+            }
+            return;
+          } else {
+            // Clear old backup
+            localStorage.removeItem(`room_${roomId}_code_backup`);
+            localStorage.removeItem(`room_${roomId}_code_backup_timestamp`);
+          }
+        }
+        
         isRemoteUpdate.current = true;
         editorRef.current.setValue(code);
         isRemoteUpdate.current = false;
@@ -352,6 +443,99 @@ function Room() {
       }
     };
   }, [roomId, name, namePrompt]);
+
+  // Handle browser tab closing, navigation, and other leave scenarios
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Save code immediately when user is about to leave
+      if (editorRef.current && roomId) {
+        const currentCode = editorRef.current.getValue();
+        const validation = validateCodeSize(currentCode);
+        
+        if (validation.isValid && currentCode.trim().length > 0) {
+          // Save to localStorage immediately as backup
+          localStorage.setItem(`room_${roomId}_code_backup`, currentCode);
+          localStorage.setItem(`room_${roomId}_code_backup_timestamp`, Date.now().toString());
+          
+          // Also try to save via socket (may not complete in time)
+          saveCodeImmediately();
+        }
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      // Also save when tab becomes hidden (user might be closing)
+      if (document.hidden) {
+        saveCodeImmediately();
+      }
+    };
+
+    // Handle browser back/forward navigation
+    const handlePopState = () => {
+      if (editorRef.current && roomId) {
+        const currentCode = editorRef.current.getValue();
+        const validation = validateCodeSize(currentCode);
+        
+        if (validation.isValid && currentCode.trim().length > 0) {
+          // Save to localStorage for browser navigation
+          localStorage.setItem(`room_${roomId}_code_backup`, currentCode);
+          localStorage.setItem(`room_${roomId}_code_backup_timestamp`, Date.now().toString());
+          saveCodeImmediately();
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [saveCodeImmediately, roomId]);
+
+  // Custom navigation handler for the Home link
+  const handleHomeNavigation = useCallback(async (event: React.MouseEvent) => {
+    event.preventDefault(); // Prevent immediate navigation
+    
+    if (editorRef.current && !isSaving) {
+      const currentCode = editorRef.current.getValue();
+      const validation = validateCodeSize(currentCode);
+      
+      // If there's valid code, save it first
+      if (validation.isValid && currentCode.trim().length > 0) {
+        console.log('Saving code before navigation to home...');
+        await saveCodeWithPromise();
+      }
+    }
+    
+    // Navigate after save completes
+    navigate('/');
+  }, [navigate, saveCodeWithPromise, isSaving]);
+
+  // Save code when component unmounts (navigation away from room)
+  useEffect(() => {
+    return () => {
+      // Component is unmounting (user navigating away from room)
+      // Save code immediately before leaving
+      if (editorRef.current && socketRef.current && roomId) {
+        const currentCode = editorRef.current.getValue();
+        const validation = validateCodeSize(currentCode);
+        
+        if (validation.isValid) {
+          console.log('Saving code before navigation...');
+          socketRef.current.emit('saveCode', { room: roomId, code: currentCode });
+        }
+      }
+
+      // Also cleanup LSP client if connected
+      if (lspClientRef.current) {
+        lspClientRef.current.disconnect();
+      }
+    };
+  }, []); // Empty dependency array means this runs only on mount/unmount
 
   // Browser focus/blur event detection (only for non-authenticated users)
   useEffect(() => {
@@ -1015,9 +1199,21 @@ function Room() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '1rem 2rem', boxSizing: 'border-box', marginBottom: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             {isAuthenticated && (
-              <Link to="/" style={{ color: '#61dafb', textDecoration: 'none', fontSize: '1em' }}>
-                Home
-              </Link>
+              <button 
+                onClick={handleHomeNavigation}
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: '#61dafb', 
+                  textDecoration: 'none', 
+                  fontSize: '1em', 
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? 'Saving...' : 'Home'}
+              </button>
             )}
             <div>
               <h1 style={{ margin: 0, fontSize: '1.5em' }}>
@@ -1054,6 +1250,11 @@ function Room() {
             )}
 
             {copyMsg && <span style={{ color: '#0f0' }}>{copyMsg}</span>}
+            {isSaving && (
+              <span style={{ color: '#ffa500', fontSize: '0.9em' }}>
+                💾 Saving...
+              </span>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>

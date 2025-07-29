@@ -73,6 +73,13 @@ const setupRoomHandlers = (io, socket) => {
       await roomService.updateRoomCode(room, code);
       await roomService.recordSnapshot(room, code);
       console.log(`Successfully saved code for room ${room}: ${validation.sizeBytes} bytes`);
+      
+      // Emit success confirmation (optional, for debugging)
+      socket.emit('save_confirmation', { 
+        room: room, 
+        timestamp: new Date().toISOString(),
+        size: validation.sizeBytes 
+      });
     } catch (error) {
       console.error(`Error saving code for room ${room}:`, error);
       
@@ -80,6 +87,8 @@ const setupRoomHandlers = (io, socket) => {
       if (error.message.includes('paused')) {
         socket.emit('room_error', { message: error.message });
         socket.emit('roomPauseStatus', { isPaused: true });
+      } else {
+        socket.emit('room_error', { message: 'Failed to save code. Please try again.' });
       }
     }
   });
@@ -337,6 +346,19 @@ const setupRoomHandlers = (io, socket) => {
   socket.on('disconnecting', () => {
     for (const room of socket.rooms) {
       if (room !== socket.id) { // Skip the socket's own room
+        // Save any pending code changes before user disconnects
+        const roomState = roomService.getRoomState(room);
+        if (roomState && roomState.code) {
+          // Perform a final save of the current room state
+          roomService.updateRoomCode(room, roomState.code)
+            .then(() => {
+              console.log(`Successfully saved code for room ${room} before user ${socket.id} disconnected`);
+            })
+            .catch((error) => {
+              console.error(`Error saving code for room ${room} before disconnect:`, error);
+            });
+        }
+
         const users = roomService.removeUserFromRoom(room, socket.id);
         io.in(room).emit('userList', { users });
         
