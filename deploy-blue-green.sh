@@ -136,11 +136,11 @@ echo "✅ Traffic switched to $INACTIVE_COLOR"
 sleep 10
 
 # 7. Stop the old (previously active) environment
-echo "✅ The old environment ($ACTIVE_COLOR) is still running. You can switch back to it quickly if needed by re-running this script."
-echo "   Once you are confident the new version is stable, you can manually stop it by running:"
-echo "   docker-compose -f $DOCKER_COMPOSE_FILE stop codecrush-$ACTIVE_COLOR"
-# echo "🛑 Stopping old environment: $ACTIVE_COLOR..."
-# docker-compose -f "$DOCKER_COMPOSE_FILE" stop "codecrush-$ACTIVE_COLOR"
+# echo "✅ The old environment ($ACTIVE_COLOR) is still running. You can switch back to it quickly if needed by re-running this script."
+# echo "   Once you are confident the new version is stable, you can manually stop it by running:"
+# echo "   docker-compose -f $DOCKER_COMPOSE_FILE stop codecrush-$ACTIVE_COLOR"
+echo "🛑 Stopping old environment: $ACTIVE_COLOR..."
+docker-compose -f "$DOCKER_COMPOSE_FILE" stop "codecrush-$ACTIVE_COLOR"
 
 # Optional: Clean up old container resources
 # echo "🧹 Cleaning up old container..."
