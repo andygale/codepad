@@ -36,9 +36,9 @@ RUN node language-servers/install.js
 
 # Verify that coroutines JARs were installed properly
 RUN echo "🔍 Verifying language server installations..." && \
-    ls -la language-servers/kotlin-language-server/server/lib/*coroutines* || \
-    (echo "❌ ERROR: Kotlin coroutines JARs not found in language server lib directory" && exit 1) && \
-    echo "✅ Kotlin coroutines JARs verified"
+    ls -la language-servers/kotlin-language-server/server/lib/kotlinx-coroutines-core-jvm-1.6.4.jar || \
+    (echo "❌ ERROR: Kotlin coroutines JAR (1.6.4) not found in language server lib directory" && exit 1) && \
+    echo "✅ Kotlin coroutines JAR (1.6.4) verified"
 
 # Build the application
 # The ARG values are automatically available as environment variables during this step

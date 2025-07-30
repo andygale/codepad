@@ -90,9 +90,9 @@ class LanguageServerManager {
   // Helper to ensure kotlinx-coroutines jar is present inside the Kotlin LS distribution
   async ensureKotlinCoroutinesJar(config) {
     try {
-      const desiredVersion = '1.10.2';
-      const jarName = `kotlinx-coroutines-core-${desiredVersion}.jar`;
-      const altJarName = `kotlinx-coroutines-core-jvm-${desiredVersion}.jar`; // some launch scripts expect this name
+      // Use the exact version that the startup script expects (found in hardcoded classpath)
+      const desiredVersion = '1.6.4';
+      const jarName = `kotlinx-coroutines-core-jvm-${desiredVersion}.jar`;
       const libDir = path.join(config.serverDir, 'server', 'lib');
 
       if (!fs.existsSync(libDir)) {
@@ -102,81 +102,32 @@ class LanguageServerManager {
       }
 
       const targetPath = path.join(libDir, jarName);
-      const altTargetPath = path.join(libDir, altJarName);
       
-      // Check if coroutines JARs already exist (they should from build time)
-      const mainJarExists = fs.existsSync(targetPath);
-      const altJarExists = fs.existsSync(altTargetPath);
-      
-      if (mainJarExists && altJarExists) {
-        console.log(`[LS Manager] Coroutines JARs already present in lib directory`);
-        // Still ensure Maven repo has it
-        await this.ensureMavenRepo(targetPath, desiredVersion, jarName);
+      // Check if the exact JAR the startup script expects already exists
+      const jarExists = fs.existsSync(targetPath);
+      if (jarExists) {
+        console.log(`[LS Manager] ${jarName} already exists in LS lib`);
         return;
       }
 
-      // Only try to download/write if JARs are missing (should not happen in production Docker)
-      console.log(`[LS Manager] Coroutines JARs missing from lib directory, attempting to install...`);
-      
-      // Check write permissions first
-      try {
-        const testFile = path.join(libDir, '.write-test');
-        fs.writeFileSync(testFile, 'test');
-        fs.unlinkSync(testFile);
-      } catch (permError) {
-        console.error(`[LS Manager] No write permission to lib directory: ${libDir}`);
-        console.error(`[LS Manager] This is expected in Docker - coroutines should be installed during build`);
-        return; // Gracefully fail rather than crash the language server
-      }
-
-      // Remove any outdated coroutine jars to avoid duplicate classes
-      try {
-        const existing = fs.readdirSync(libDir).filter(f => (f.startsWith('kotlinx-coroutines-core-jvm-') || f.startsWith('kotlinx-coroutines-core-')) && f.endsWith('.jar'));
-        for (const f of existing) {
-          if (f !== jarName && f !== altJarName) {
-            fs.rmSync(path.join(libDir, f));
-            console.log(`[LS Manager] Removed outdated ${f}`);
-          }
-        }
-      } catch (cleanupError) {
-        console.warn(`[LS Manager] Could not clean up old coroutines JARs: ${cleanupError.message}`);
-      }
-
+      // Download the version that matches the hardcoded classpath
       let downloaded = false;
-      if (!mainJarExists) {
-        try {
-          console.log(`[LS Manager] Downloading ${jarName} for coroutine IntelliSense support...`);
-          const axios = (await import('../server/node_modules/axios/index.js')).default;
-          const url = `https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core/${desiredVersion}/${jarName}`;
-          const resp = await axios({ method: 'get', url, responseType: 'stream' });
-          await new Promise((resolve, reject) => {
-            const writer = fs.createWriteStream(targetPath);
-            resp.data.pipe(writer);
-            writer.on('finish', resolve);
-            writer.on('error', reject);
-          });
-          downloaded = true;
-          console.log(`[LS Manager] Added ${jarName} to LS lib`);
-        } catch (downloadError) {
-          console.error(`[LS Manager] Failed to download coroutines JAR: ${downloadError.message}`);
-          return; // Don't proceed if download failed
-        }
-      }
-
-      // Ensure an alternative file name with the "-jvm" classifier exists as some KLS launch scripts
-      // still hard-code that pattern. Keep a hard link/copy to avoid doubling disk usage.
-      if (!altJarExists) {
-        try {
-          // Use a hard link when possible, fall back to a normal copy otherwise
-          try {
-            fs.linkSync(targetPath, altTargetPath);
-          } catch {
-            fs.copyFileSync(targetPath, altTargetPath);
-          }
-          console.log(`[LS Manager] Added alias ${altJarName} → ${jarName}`);
-        } catch (err) {
-          console.warn('[LS Manager] Unable to create alt coroutines jar', err.message);
-        }
+      try {
+        console.log(`[LS Manager] Downloading ${jarName} for coroutine IntelliSense support...`);
+        const axios = (await import('../server/node_modules/axios/index.js')).default;
+        const url = `https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/${desiredVersion}/${jarName}`;
+        const resp = await axios({ method: 'get', url, responseType: 'stream' });
+        await new Promise((resolve, reject) => {
+          const writer = fs.createWriteStream(targetPath);
+          resp.data.pipe(writer);
+          writer.on('finish', resolve);
+          writer.on('error', reject);
+        });
+        downloaded = true;
+        console.log(`[LS Manager] Added ${jarName} to LS lib`);
+      } catch (downloadError) {
+        console.warn(`[LS Manager] Failed to download ${jarName}: ${downloadError.message}`);
+        return;
       }
 
       // Also place the jar in local Maven repository so that the LS can find it when Gradle is absent.
@@ -185,10 +136,22 @@ class LanguageServerManager {
       if (downloaded) {
         console.log(`[LS Manager] kotlinx-coroutines ${desiredVersion} ready`);
       }
+      
+      // Verify that the JAR actually contains coroutines classes
+      try {
+        const { spawnSync } = require('child_process');
+        const jarCheck = spawnSync('jar', ['-tf', targetPath], { encoding: 'utf8' });
+        if (jarCheck.stdout && jarCheck.stdout.includes('kotlinx/coroutines/CoroutineScope')) {
+          console.log(`[LS Manager] ✅ Verified ${jarName} contains CoroutineScope class`);
+        } else {
+          console.warn(`[LS Manager] ⚠️ ${jarName} may be missing CoroutineScope class`);
+        }
+      } catch (verifyError) {
+        console.warn(`[LS Manager] Could not verify JAR contents: ${verifyError.message}`);
+      }
 
     } catch (err) {
-      console.error('[LS Manager] Failed to set up kotlinx-coroutines jar', err.message);
-      // Don't throw - allow language server to start even if coroutines setup fails
+      console.error(`[LS Manager] Error ensuring kotlinx-coroutines jar: ${err.message}`);
     }
   }
   
