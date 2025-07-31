@@ -34,7 +34,18 @@ function LandingPage() {
   const [title, setTitle] = useState('');
   const [error, setError] = useState('');
   const [authError, setAuthError] = useState('');
-  const [showMyRooms, setShowMyRooms] = useState(false);
+  
+  // Initialize showMyRooms from localStorage with fallback to false
+  const [showMyRooms, setShowMyRooms] = useState(() => {
+    try {
+      const stored = localStorage.getItem('codecrush_showMyRooms');
+      return stored !== null ? JSON.parse(stored) : false;
+    } catch (error) {
+      console.warn('Failed to read showMyRooms from localStorage:', error);
+      return false;
+    }
+  });
+  
   const [currentPage, setCurrentPage] = useState(1);
   const [totalRooms, setTotalRooms] = useState(0);
   const [restartingRooms, setRestartingRooms] = useState<Set<string>>(new Set());
@@ -194,7 +205,22 @@ function LandingPage() {
             <h2>Or Join an Existing Room</h2>
             <div className="filter-container">
               <label>
-                <input type="checkbox" checked={showMyRooms} onChange={(e) => { setShowMyRooms(e.target.checked); setCurrentPage(1); }} />
+                <input 
+                  type="checkbox" 
+                  checked={showMyRooms} 
+                  onChange={(e) => { 
+                    const checked = e.target.checked;
+                    setShowMyRooms(checked); 
+                    setCurrentPage(1);
+                    
+                    // Save to localStorage for persistence
+                    try {
+                      localStorage.setItem('codecrush_showMyRooms', JSON.stringify(checked));
+                    } catch (error) {
+                      console.warn('Failed to save showMyRooms to localStorage:', error);
+                    }
+                  }} 
+                />
                 Only show my rooms
               </label>
             </div>
