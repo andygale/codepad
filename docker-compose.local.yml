@@ -8,6 +8,7 @@ services:
     environment:
       - PORT=3001
       - PISTON_API_URL=http://host.docker.internal:2000/api/v2/execute
+      - DATABASE_URL=postgresql://agale@host.docker.internal:5432/codepad
     restart: unless-stopped
     volumes:
       - language-servers:/app/language-servers
@@ -30,6 +31,7 @@ services:
     environment:
       - PORT=3002
       - PISTON_API_URL=http://host.docker.internal:2000/api/v2/execute
+      - DATABASE_URL=postgresql://agale@host.docker.internal:5432/codepad
     restart: unless-stopped
     volumes:
       - language-servers:/app/language-servers
@@ -49,7 +51,7 @@ services:
       - "5000:5000"
     volumes:
       - ./nginx.local.conf:/etc/nginx/nginx.conf:ro
-      - ./upstream.conf:/etc/nginx/upstream.conf:ro
+      - ./upstream.conf:/etc/nginx/upstream.conf
     depends_on:
       - codecrush-blue
       - codecrush-green

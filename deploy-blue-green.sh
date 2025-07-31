@@ -1,11 +1,46 @@
 #!/bin/bash
 
 # Blue-Green Deployment Script for CodeCrush
+# Supports both 'local' and 'prod' environments
 set -e
 
-APP_DIR="/home/ubuntu/codecrush"
-DOCKER_COMPOSE_FILE="docker-compose.blue-green.yml"
-NGINX_UPSTREAM_CONFIG="/etc/nginx/upstream.conf"
+# --- Environment Configuration ---
+
+# Default to 'prod' environment if not specified
+ENV="prod"
+
+# Parse command-line arguments
+if [ "$1" == "--env" ]; then
+    if [ -n "$2" ]; then
+        if [ "$2" == "local" ] || [ "$2" == "prod" ]; then
+            ENV="$2"
+        else
+            echo "❌ Invalid environment '$2'. Please use 'local' or 'prod'."
+            exit 1
+        fi
+    else
+        echo "❌ Missing environment value. Please use 'local' or 'prod'."
+        exit 1
+    fi
+fi
+
+echo "🚀 Starting deployment for environment: $ENV"
+
+# Set environment-specific variables
+if [ "$ENV" == "local" ]; then
+    DOCKER_COMPOSE_FILE="docker-compose.local.yml"
+    NGINX_UPSTREAM_CONFIG="upstream.conf"
+    APP_DIR="."
+    SUDO_CMD=""
+    echo "Using local configuration files (sudo disabled)."
+else
+    # Production environment settings
+    DOCKER_COMPOSE_FILE="docker-compose.blue-green.yml"
+    NGINX_UPSTREAM_CONFIG="/etc/nginx/upstream.conf"
+    APP_DIR="/home/ubuntu/codecrush"
+    SUDO_CMD="sudo"
+    echo "Using production configuration files (sudo enabled)."
+fi
 
 # --- Helper Functions ---
 
@@ -30,24 +65,22 @@ switch_to_color() {
         NEW_UPSTREAM="upstream codecrush_upstream { server codecrush-green:3002; }"
     fi
     
-    # Method 1: Update host file (for persistence)
-    echo "$NEW_UPSTREAM" > nginx_upstream_temp.conf
-    sudo mv nginx_upstream_temp.conf "$NGINX_UPSTREAM_CONFIG"
+    # Update the upstream configuration file
+    echo "$NEW_UPSTREAM" | $SUDO_CMD tee "$NGINX_UPSTREAM_CONFIG" > /dev/null
     
-    # Method 2: Update directly in nginx container (for immediate effect)
+    # Update nginx container configuration
     echo "Updating nginx container configuration..."
-    sudo docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx sh -c "echo '$NEW_UPSTREAM' > /etc/nginx/upstream.conf"
-    
-    # Verify the configuration syntax
+    docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx sh -c "echo '$NEW_UPSTREAM' > /etc/nginx/upstream.conf"
+
+    # Test and reload nginx
     echo "Testing nginx configuration..."
-    if ! sudo docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx nginx -t; then
+    if ! docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx nginx -t; then
         echo "❌ Nginx configuration test failed!"
         return 1
     fi
     
-    # Reload nginx gracefully
     echo "Reloading nginx configuration..."
-    if sudo docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx nginx -s reload; then
+    if docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx nginx -s reload; then
         echo "✅ Nginx reloaded successfully"
     else
         echo "❌ Nginx reload failed!"
@@ -56,7 +89,7 @@ switch_to_color() {
     
     # Verify the change took effect
     echo "Verifying configuration change..."
-    CURRENT_CONFIG=$(sudo docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx cat /etc/nginx/upstream.conf)
+    CURRENT_CONFIG=$(docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx cat /etc/nginx/upstream.conf)
     echo "Current nginx config: $CURRENT_CONFIG"
     
     if echo "$CURRENT_CONFIG" | grep -q "$color"; then
@@ -83,21 +116,22 @@ fi
 echo "Active color: $ACTIVE_COLOR"
 echo "Deploying to inactive color: $INACTIVE_COLOR"
 
-# 2. Update code from Git
-echo "🔄 Updating from GitHub..."
-git pull origin main
+# 2. Update code from Git (for production only)
+if [ "$ENV" == "prod" ]; then
+    echo "🔄 Updating from GitHub..."
+    git pull origin main
+fi
 
 # 3. Build and start the new (inactive) environment
 echo "🏗️ Building and starting $INACTIVE_COLOR environment..."
-# Use plain progress for cleaner output
-export BUILDKIT_PROGRESS=plain
+#export BUILDKIT_PROGRESS=plain
 time docker-compose -f "$DOCKER_COMPOSE_FILE" build "codecrush-$INACTIVE_COLOR"
 docker-compose -f "$DOCKER_COMPOSE_FILE" up -d --no-deps "codecrush-$INACTIVE_COLOR"
 
 # 4. Wait for the new container to be healthy
 echo "⏳ Waiting for $INACTIVE_COLOR to become healthy..."
 HEALTH_STATUS=""
-for i in {1..10}; do
+for i in {1..20}; do
     # Check for a healthy state. `grep -q` is used to check quietly.
     if docker-compose -f "$DOCKER_COMPOSE_FILE" ps "codecrush-$INACTIVE_COLOR" | grep -q '(healthy)'; then
         echo "✅ $INACTIVE_COLOR is healthy!"
@@ -112,8 +146,8 @@ for i in {1..10}; do
         exit 1
     fi
 
-    echo "Attempt $i: $INACTIVE_COLOR is not healthy yet. Retrying in 15 seconds..."
-    sleep 15
+    echo "Attempt $i: $INACTIVE_COLOR is not healthy yet. Retrying in 5 seconds..."
+    sleep 5
 done
 
 if [ -z "$HEALTH_STATUS" ]; then
@@ -122,23 +156,15 @@ if [ -z "$HEALTH_STATUS" ]; then
     exit 1
 fi
 
-# 5. Run database migrations (only once from one of the services)
+# 5. Run database migrations
 echo "📦 Running database migrations..."
-# We override the entrypoint and set the working directory to /app/server
-# to correctly run the 'migrate' script from server/package.json.
 docker-compose -f "$DOCKER_COMPOSE_FILE" run --rm --entrypoint "" -w /app/server "codecrush-$INACTIVE_COLOR" yarn migrate
 
 # 6. Switch NGINX to the new environment
 switch_to_color "$INACTIVE_COLOR"
 echo "✅ Traffic switched to $INACTIVE_COLOR"
 
-# Give it a moment for traffic to stabilize
-sleep 10
-
-# 7. Stop the old (previously active) environment
-# echo "✅ The old environment ($ACTIVE_COLOR) is still running. You can switch back to it quickly if needed by re-running this script."
-# echo "   Once you are confident the new version is stable, you can manually stop it by running:"
-# echo "   docker-compose -f $DOCKER_COMPOSE_FILE stop codecrush-$ACTIVE_COLOR"
+# 7. Stop the old environment
 echo "🛑 Stopping old environment: $ACTIVE_COLOR..."
 docker-compose -f "$DOCKER_COMPOSE_FILE" stop "codecrush-$ACTIVE_COLOR"
 
