@@ -34,11 +34,20 @@ router.get('/rooms', requireAuth, async (req, res) => {
 router.get('/rooms/:roomId', async (req, res) => {
   const { roomId } = req.params;
   const room = await roomService.getRoom(roomId);
-  if (room) {
-    res.json(room);
-  } else {
-    res.status(404).json({ error: 'Room not found' });
+  if (!room) {
+    return res.status(404).json({ error: 'Room not found' });
   }
+
+  // SECURITY: Check if room is paused and user is not authenticated
+  const isAuthenticated = req.session?.user?.isAuthenticated || false;
+  if (room.is_paused && !isAuthenticated) {
+    console.log(`Unauthenticated user attempted to access paused room ${roomId} via HTTP - access denied`);
+    return res.status(403).json({ 
+      error: 'This room is paused and only accessible to logged-in users. Please sign in to access this room.' 
+    });
+  }
+
+  res.json(room);
 });
 
 router.post('/rooms', requireAuth, async (req, res) => {

@@ -60,7 +60,7 @@ type ClientEvents = {
 function Room() {
   const { roomId } = useParams();
   const { user, isAuthenticated, loading, initializeAuth } = useAuth();
-  const [roomStatus, setRoomStatus] = useState<'loading' | 'found' | 'not_found'>('loading');
+  const [roomStatus, setRoomStatus] = useState<'loading' | 'found' | 'not_found' | 'paused_auth_required'>('loading');
   const [roomTitle, setRoomTitle] = useState('');
   const [roomCreatedAt, setRoomCreatedAt] = useState('');
   const [isPaused, setIsPaused] = useState(false);
@@ -223,12 +223,15 @@ function Room() {
       }
       try {
         const response = await axios.get(`${API_URL}/api/rooms/${roomId}`);
-        
-
-        
         setRoomStatus('found');
-      } catch (error) {
-        setRoomStatus('not_found');
+      } catch (error: any) {
+        if (error.response?.status === 403) {
+          // Room exists but is paused and requires authentication
+          setRoomStatus('paused_auth_required');
+        } else {
+          // Room doesn't exist or other error
+          setRoomStatus('not_found');
+        }
       }
     };
     checkRoomExists();
@@ -1165,6 +1168,47 @@ function Room() {
           <Link to="/" style={{ color: '#61dafb', fontSize: '1.2em' }}>
             Go back to Home
           </Link>
+        </header>
+      </div>
+    );
+  }
+
+  if (roomStatus === 'paused_auth_required') {
+    return (
+      <div className="App">
+        <header className="App-header">
+          <h1>🔒 Authentication Required</h1>
+          <p>This room is paused and only accessible to logged-in users.</p>
+          <p>Please sign in to access this room.</p>
+          <div style={{ marginTop: '2rem' }}>
+            <button 
+              onClick={() => window.location.href = '/'}
+              style={{
+                marginRight: '1rem',
+                padding: '12px 24px',
+                backgroundColor: '#61dafb',
+                color: '#282c34',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '16px',
+                cursor: 'pointer',
+                textDecoration: 'none'
+              }}
+            >
+              Sign In
+            </button>
+            <Link 
+              to="/" 
+              style={{ 
+                color: '#61dafb', 
+                fontSize: '1.2em',
+                textDecoration: 'none',
+                marginLeft: '1rem'
+              }}
+            >
+              Go back to Home
+            </Link>
+          </div>
         </header>
       </div>
     );

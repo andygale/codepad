@@ -21,6 +21,14 @@ const setupRoomHandlers = (io, socket) => {
         return;
       }
 
+      // SECURITY: Check if room is paused and user is not authenticated
+      if (room.is_paused && !isAuthenticated) {
+        const userInfo = `Guest`;
+        console.log(`${userInfo} attempted to join paused room ${roomId} - access denied`);
+        socket.emit('room_error', { message: 'This room is paused and only accessible to logged-in users. Please sign in to access this room.' });
+        return;
+      }
+
       // Send room details to the joining user, including pause status
       socket.emit('room_details', { 
         title: room.title, 
