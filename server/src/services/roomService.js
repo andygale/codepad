@@ -237,11 +237,11 @@ greeter.greet();`;
 
   async findRoomsToAutoPause() {
     try {
-      // Find rooms that are not paused and have been inactive for more than 24 hours
+      // Find rooms that are not paused and have been inactive for more than 3 hours
       const result = await db.query(`
         SELECT room_id FROM rooms 
         WHERE is_paused = false 
-        AND last_activity_at < NOW() - INTERVAL '24 hours'
+        AND last_activity_at < NOW() - INTERVAL '3 hours'
       `);
       return result.rows.map(row => row.room_id);
     } catch (error) {
@@ -257,7 +257,7 @@ greeter.greet();`;
         const roomsToPause = await this.findRoomsToAutoPause();
         for (const roomId of roomsToPause) {
           await this.pauseRoom(roomId);
-          console.log(`Auto-paused room ${roomId} after 24 hours of inactivity`);
+          console.log(`Auto-paused room ${roomId} after 3 hours of inactivity`);
         }
       } catch (error) {
         console.error('Error in auto-pause scheduler:', error);
