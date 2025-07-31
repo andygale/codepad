@@ -908,8 +908,8 @@ function Room() {
           return originalSetModelMarkers.call(this, model, owner, []);
         }
         
-        // For other languages, allow typescript/javascript validation
-        if (owner === 'typescript' || owner === 'javascript') {
+        // For other languages, only allow a validator if its language matches the model's
+        if ((owner === 'typescript' || owner === 'javascript') && (modelLanguage === 'typescript' || modelLanguage === 'javascript' || modelLanguage === 'deno')) {
           console.log(`[Monaco] Allowing ${owner} markers for model language ${modelLanguage}`);
           return originalSetModelMarkers.call(this, model, owner, markers);
         }
