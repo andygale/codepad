@@ -3,8 +3,12 @@ const codeExecutionService = require('../services/codeExecutionService');
 const roomService = require('../services/roomService');
 const { requireAuth } = require('../middleware/authMiddleware');
 const { validateCodeSizeMiddleware } = require('../utils/validation');
+const { createRoomAccessRateLimit, getRateLimitStats } = require('../middleware/rateLimitMiddleware');
 
 const router = express.Router();
+
+// Apply rate limiting middleware to room access endpoints
+const roomAccessRateLimit = createRoomAccessRateLimit();
 
 // Whitelist of supported languages
 const SUPPORTED_LANGUAGES = new Set([
@@ -31,7 +35,7 @@ router.get('/rooms', requireAuth, async (req, res) => {
   });
 });
 
-router.get('/rooms/:roomId', async (req, res) => {
+router.get('/rooms/:roomId', roomAccessRateLimit, async (req, res) => {
   const { roomId } = req.params;
   const room = await roomService.getRoom(roomId);
   if (!room) {
@@ -164,6 +168,9 @@ router.post('/execute', validateCodeSizeMiddleware('code'), async (req, res) => 
     });
   }
 });
+
+// Rate limiting stats endpoint (for monitoring and debugging)
+router.get('/rate-limit-stats', requireAuth, getRateLimitStats);
 
 // Playback history endpoint
 router.get('/rooms/:roomId/history', requireAuth, async (req, res) => {

@@ -19,6 +19,15 @@ const config = {
   // Security configuration
   maxCodeSizeBytes: parseInt(process.env.MAX_CODE_SIZE_BYTES, 10) || 10240, // 10KB default
   
+  // Rate limiting configuration for brute force protection
+  rateLimiting: {
+    roomAccess: {
+      maxAttempts: parseInt(process.env.RATE_LIMIT_MAX_ATTEMPTS, 10) || 5, // Max failed attempts per window
+      windowMinutes: parseInt(process.env.RATE_LIMIT_WINDOW_MINUTES, 10) || 15, // 15 minutes window
+      blockDurationMinutes: parseInt(process.env.RATE_LIMIT_BLOCK_MINUTES, 10) || 60, // 1 hour block
+    }
+  },
+  
   // Language configurations
   languageVersions: {
     javascript: '20.11.1',
