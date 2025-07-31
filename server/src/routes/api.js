@@ -47,7 +47,9 @@ router.get('/rooms/:roomId', async (req, res) => {
     });
   }
 
-  res.json(room);
+  // SECURITY: Filter out sensitive creator information from response
+  const { creator, creator_email, ...safeRoomData } = room;
+  res.json(safeRoomData);
 });
 
 router.post('/rooms', requireAuth, async (req, res) => {
