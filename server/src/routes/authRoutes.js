@@ -5,10 +5,14 @@ const router = express.Router();
 
 // Microsoft SSO callback
 router.post('/callback', async (req, res) => {
+  console.log('🔥 AUTH CALLBACK HIT! 🔥');
   console.log('=== AUTH CALLBACK START ===');
+  console.log('Request method:', req.method);
+  console.log('Request URL:', req.url);
   console.log('Request headers:', JSON.stringify(req.headers, null, 2));
   console.log('Request body:', req.body);
   console.log('Session before:', req.session);
+  console.log('Session ID before:', req.sessionID);
   
   const { token } = req.body;
   

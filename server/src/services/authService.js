@@ -81,7 +81,15 @@ async function handleMicrosoftCallback(req, idToken) {
       isAuthenticated: true
     };
 
-    console.log('User session created:', req.session.user);
+    // Manually save the session to ensure it's written before the response is sent
+    await new Promise((resolve, reject) => {
+      req.session.save(err => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+
+    console.log('User session created and saved:', req.session.user);
     console.log('Token claims:', Object.keys(decodedToken));
     
     return { 

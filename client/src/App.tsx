@@ -248,12 +248,14 @@ function LandingPage() {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/room/:roomId" element={<Room />} />
-      <Route path="/handleRedirect" element={<HandleRedirect />} />
-      <Route path="/instructions" element={<Instructions />} />
-    </Routes>
+    <>
+      <HandleRedirect />
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/room/:roomId" element={<Room />} />
+        <Route path="/instructions" element={<Instructions />} />
+      </Routes>
+    </>
   );
 }
 

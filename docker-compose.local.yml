@@ -1,0 +1,63 @@
+services:
+  codecrush-blue:
+    build: .
+    expose:
+      - "3001"
+    env_file:
+      - .env
+    environment:
+      - PORT=3001
+    restart: unless-stopped
+    volumes:
+      - language-servers:/app/language-servers
+    networks:
+      - codecrush-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  codecrush-green:
+    build: .
+    expose:
+      - "3002"
+    env_file:
+      - .env
+    environment:
+      - PORT=3002
+    restart: unless-stopped
+    volumes:
+      - language-servers:/app/language-servers
+    networks:
+      - codecrush-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/api/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./nginx.local.conf:/etc/nginx/nginx.conf:ro
+      - ./upstream.conf:/etc/nginx/upstream.conf:ro
+    depends_on:
+      - codecrush-blue
+      - codecrush-green
+    restart: unless-stopped
+    networks:
+      - codecrush-network
+
+volumes:
+  language-servers:
+
+networks:
+  codecrush-network:
+    driver: bridge

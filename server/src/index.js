@@ -35,7 +35,9 @@ const sessionMiddleware = session({
     secure: config.nodeEnv === 'production',
     httpOnly: true,
     maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
-    sameSite: 'lax', // Use 'lax' since frontend and backend are same domain
+    // Use 'none' for production to allow cross-site cookie sending,
+    // but it requires a secure context. 'lax' is safer for local http.
+    sameSite: config.nodeEnv === 'production' ? 'none' : 'lax',
   },
   name: 'codecrush.sid', // Custom session cookie name for easier debugging
 });

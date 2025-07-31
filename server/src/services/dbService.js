@@ -9,8 +9,18 @@ class DbService {
       // In production, SSL is required unless explicitly disabled.
       const useSsl = config.nodeEnv === 'production' && process.env.DATABASE_SSL !== 'false';
 
+      // Auto-detect if we're running in Docker and adjust database URL accordingly
+      let databaseUrl = config.databaseUrl;
+      
+      // If we're in a Docker container and the URL contains 'localhost', 
+      // replace it with 'host.docker.internal'
+      if (process.env.HOSTNAME && databaseUrl.includes('localhost')) {
+        databaseUrl = databaseUrl.replace('localhost', 'host.docker.internal');
+        console.log('🐳 Detected Docker environment, using host.docker.internal for database connection');
+      }
+
       const connectionConfig = {
-        connectionString: config.databaseUrl,
+        connectionString: databaseUrl,
       };
 
       // SECURITY: In production, enforce SSL and use the AWS RDS CA certificate for verification.
@@ -24,12 +34,12 @@ class DbService {
           console.log('Database SSL configured with AWS RDS CA certificate.');
         } else {
           console.error('FATAL: Could not find AWS RDS CA certificate. SSL cannot be configured securely.');
-          // In a real production scenario, you might want to prevent the app from starting.
-          // For now, we will fall back to the default behavior which might be insecure.
-          connectionConfig.ssl = { rejectUnauthorized: false };
+          connectionConfig.ssl = { rejectUnauthorized: false }; // Fallback for safety
         }
-      } else if (config.nodeEnv === 'production') {
-        console.warn('WARNING: Connecting to the production database WITHOUT SSL. This is highly insecure.');
+      } else {
+        // For local development or when explicitly disabled, turn SSL off.
+        connectionConfig.ssl = false;
+        console.log('Database SSL has been explicitly disabled.');
       }
 
       this.pool = new Pool(connectionConfig);
