@@ -100,6 +100,11 @@ io.on('connection', (socket) => {
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, '../../client/build')));
 
+// For any other route, serve index.html from the React build
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
+});
+
 // Development info endpoint
 app.get('/api/info', (req, res) => {
   res.json({
@@ -120,11 +125,6 @@ app.get('/api/info', (req, res) => {
 // Language Server status endpoint
 app.get('/api/language-server/status', (req, res) => {
   res.json(languageServerService.getStatus());
-});
-
-// For any other route, serve index.html from the React build
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
 });
 
 // Start server

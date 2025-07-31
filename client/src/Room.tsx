@@ -59,7 +59,7 @@ type ClientEvents = {
 
 function Room() {
   const { roomId } = useParams();
-  const { user, isAuthenticated, loading, initializeAuth } = useAuth();
+  const { user, isAuthenticated, loading } = useAuth();
   const [roomStatus, setRoomStatus] = useState<'loading' | 'found' | 'not_found' | 'paused_auth_required'>('loading');
   const [roomTitle, setRoomTitle] = useState('');
   const [roomCreatedAt, setRoomCreatedAt] = useState('');
@@ -210,10 +210,7 @@ function Room() {
     }
   }, [loading, isAuthenticated, user]);
 
-  // Initialize authentication when component mounts (handles direct room URLs)
-  useEffect(() => {
-    initializeAuth();
-  }, [initializeAuth]);
+  
 
   useEffect(() => {
     const checkRoomExists = async () => {

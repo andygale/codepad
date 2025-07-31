@@ -2,12 +2,9 @@ import { Configuration } from "@azure/msal-browser";
 
 // Get the current domain for redirect URI
 const getRedirectUri = () => {
-  // In production, use the current domain
-  if (process.env.NODE_ENV === 'production') {
-    return `${window.location.protocol}//${window.location.host}`;
-  }
-  // In development, use localhost:5000 or the API URL if available
-  return process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  // The app is always served from the same host as the API.
+  // This dynamically constructs the redirect URI based on the current location.
+  return `${window.location.protocol}//${window.location.host}/`;
 };
 
 export const msalConfig: Configuration = {

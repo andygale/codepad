@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  BrowserRouter as Router,
   Route,
   Routes,
   Link,
@@ -9,8 +8,7 @@ import {
 import axios from 'axios';
 import { Pagination } from 'antd';
 import Room from './Room';
-import { AuthProvider, useAuth } from './AuthContext';
-import HandleRedirect from './HandleRedirect';
+import { useAuth } from './AuthContext';
 import Instructions from './Instructions';
 import codeCrushLogo from './assets/CodeCrush_logo.jpeg';
 import './App.css';
@@ -51,12 +49,10 @@ function LandingPage() {
   const [restartingRooms, setRestartingRooms] = useState<Set<string>>(new Set());
   const [pausingRooms, setPausingRooms] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
-  const { user, isAuthenticated, login, logout, loading, initializeAuth } = useAuth();
+  const { user, isAuthenticated, login, logout, loading } = useAuth();
   const ROOMS_PER_PAGE = 10;
 
-  useEffect(() => {
-    initializeAuth();
-  }, [initializeAuth]);
+  
 
   useEffect(() => {
     const fetchRooms = async () => {
@@ -277,18 +273,9 @@ function App() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/room/:roomId" element={<Room />} />
-      <Route path="/handleRedirect" element={<HandleRedirect />} />
       <Route path="/instructions" element={<Instructions />} />
     </Routes>
   );
 }
 
-const AppWrapper = () => (
-  <Router>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
-  </Router>
-);
-
-export default AppWrapper;
+export default App;

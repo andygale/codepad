@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { useMsal } from "@azure/msal-react";
+import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
+import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { loginRequest } from "./authConfig";
 import axios from 'axios';
 
@@ -17,8 +17,6 @@ interface AuthContextType {
   login: () => void;
   logout: () => void;
   loading: boolean;
-  fetchUser: () => Promise<void>;
-  initializeAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,10 +36,8 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const { instance, accounts } = useMsal();
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [initialized, setInitialized] = useState(false);
-
-  const isAuthenticated = user !== null;
+  const [loading, setLoading] = useState(true);
+  const msalIsAuthenticated = useIsAuthenticated();
 
   const fetchUser = useCallback(async () => {
     try {
@@ -54,49 +50,47 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
-  const initializeAuth = useCallback(async () => {
-    if (initialized) return;
-    
-    setLoading(true);
-    setInitialized(true);
-    
-    try {
-      // First try to get user from existing session
-      const response = await axios.get<User>(`${API_URL}/api/auth/me`, {
-        withCredentials: true,
-      });
-      setUser(response.data);
-    } catch (error) {
-      // If no backend session but we have MSAL accounts, try to get a token
-      if (accounts.length > 0) {
-        try {
-          const silentRequest = {
-            ...loginRequest,
-            account: accounts[0]
-          };
-          const response = await instance.acquireTokenSilent(silentRequest);
-          
-          // Send the token to backend to create session
-          await axios.post(`${API_URL}/api/auth/callback`, { token: response.idToken }, {
+  useEffect(() => {
+    const handleAuth = async () => {
+      setLoading(true);
+      try {
+        const result = await instance.handleRedirectPromise();
+        if (result) {
+          // We have a token from a redirect, let's process it.
+          await axios.post(`${API_URL}/api/auth/callback`, { token: result.idToken }, {
             withCredentials: true
           });
-          
-          // Try fetching user again
-          const userResponse = await axios.get<User>(`${API_URL}/api/auth/me`, {
-            withCredentials: true,
-          });
-          setUser(userResponse.data);
-        } catch (tokenError) {
-          console.error('Silent token acquisition failed:', tokenError);
-          setUser(null);
+          // After the backend creates a session, we can fetch the user details.
+          await fetchUser();
+        } else if (msalIsAuthenticated && accounts.length > 0) {
+          // We are already signed in with MSAL, but might not have a backend session.
+          // Let's try to get user from our backend first.
+          try {
+            await fetchUser();
+          } catch (e) {
+            // If that fails, acquire a token silently and establish a new session.
+            const silentRequest = { ...loginRequest, account: accounts[0] };
+            const response = await instance.acquireTokenSilent(silentRequest);
+            await axios.post(`${API_URL}/api/auth/callback`, { token: response.idToken }, {
+              withCredentials: true
+            });
+            await fetchUser();
+          }
+        } else {
+            // No token and not signed in with MSAL. Check for an existing session.
+            await fetchUser();
         }
-      } else {
+      } catch (error) {
+        console.error("Authentication failed:", error);
         setUser(null);
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [instance, accounts, initialized]);
+    };
+
+    handleAuth();
+  }, [instance, accounts, msalIsAuthenticated, fetchUser]);
+
 
   const login = () => {
     instance.loginRedirect(loginRequest).catch(e => {
@@ -105,22 +99,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = () => {
+    axios.post(`${API_URL}/api/auth/logout`, {}, { withCredentials: true });
     instance.logoutRedirect({
       postLogoutRedirectUri: "/",
     });
-    axios.post(`${API_URL}/api/auth/logout`, {}, { withCredentials: true });
     setUser(null);
   };
 
   const value: AuthContextType = {
     user,
-    isAuthenticated,
+    isAuthenticated: !!user,
     login,
     logout,
     loading,
-    fetchUser,
-    initializeAuth,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}; 
+};
