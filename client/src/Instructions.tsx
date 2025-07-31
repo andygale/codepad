@@ -54,21 +54,16 @@ const Instructions: React.FC = () => {
 
         <h3>Room Management</h3>
         <ul>
-          <li><strong>Auto-pause:</strong> Rooms automatically pause after 24 hours of inactivity to prevent abuse</li>
+          <li><strong>Auto-pause:</strong> Rooms automatically pause after 3 hours of inactivity to prevent abuse</li>
           <li><strong>Manual pause:</strong> Any logged-in user can pause/restart rooms at any time</li>
           <li><strong>Paused rooms:</strong> When paused, code editing and execution are disabled</li>
           <li><strong>Restart:</strong> Any logged-in user can restart paused rooms from the homepage</li>
+          <li><strong>Paused room access:</strong> Only authenticated users can access paused rooms</li>
         </ul>
 
         <h3>Guest Access</h3>
-        <p>Candidates do not need to log in if they have a direct link to the room. They can join as guests and participate in the session.</p>
+        <p>Candidates do not need to log in if they have a direct link to an <strong>active</strong> room. They can join as guests and participate in the session. However, if a room is paused, guests will be prompted to sign in.</p>
         
-        <h3>Security Features</h3>
-        <ul>
-          <li>Rooms pause automatically after 24 hours to limit exposure to potential attacks</li>
-          <li>Any authenticated user can restart paused rooms (authentication required)</li>
-          <li>All code execution is sandboxed through the Piston API</li>
-        </ul>
       </div>
     </div>
   );
