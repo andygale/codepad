@@ -176,7 +176,9 @@ export class LSPClient {
 
     // Register completion provider
     this.disposables.push(this.monaco.languages.registerCompletionItemProvider(this.language, {
-      triggerCharacters: ['.', '"', "'", '/', '<', '@', '#', ' '],
+      triggerCharacters: this.language === 'kotlin'
+        ? ['.'] // reduce spam for Kotlin
+        : ['.', '"', "'", '/', '<', '@', '#', ' '],
       provideCompletionItems: (model: any, position: any) => {
         return this.sendRequest('textDocument/completion', {
           textDocument: { uri: this.documentUri },
@@ -187,6 +189,10 @@ export class LSPClient {
         });
       },
       resolveCompletionItem: (item: any) => {
+        // Kotlin LS does not currently implement completionItem/resolve – skip the round-trip
+        if (this.language === 'kotlin') {
+          return item;
+        }
         return this.sendRequest('completionItem/resolve', item).then((resolved: any) => {
           return this.toMonacoCompletionItem({ ...item, ...resolved });
         });
@@ -212,12 +218,22 @@ export class LSPClient {
 
   private handleDocumentChange(event: any): void {
     this.documentVersion++;
+
+    // Send incremental changes instead of the entire document to reduce load on the language server
+    const contentChanges = event.changes.map((c: any) => ({
+      range: {
+        start: { line: c.range.startLineNumber - 1, character: c.range.startColumn - 1 },
+        end:   { line: c.range.endLineNumber   - 1, character: c.range.endColumn   - 1 }
+      },
+      text: c.text
+    }));
+
     this.sendNotification('textDocument/didChange', {
       textDocument: {
         uri: this.documentUri,
         version: this.documentVersion
       },
-      contentChanges: [{ text: this.editor.getValue() }]
+      contentChanges
     });
   }
 
