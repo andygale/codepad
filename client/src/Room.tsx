@@ -221,6 +221,25 @@ function Room() {
       try {
         const response = await axios.get(`${API_URL}/api/rooms/${roomId}`);
         setRoomStatus('found');
+        
+        // Pre-populate language and code from server before establishing Socket.IO connection.
+        if (response.data) {
+          const { language: srvLanguage, code: srvCode } = response.data;
+          if (srvLanguage) {
+            setLanguage(srvLanguage);
+            prevLanguage.current = srvLanguage;
+          }
+          if (typeof srvCode === 'string') {
+            setCode(srvCode);
+            const validation = validateCodeSize(srvCode);
+            setCodeSize(validation.sizeBytes);
+            if (!validation.isValid) {
+              setCodeSizeError(validation.error || 'Code size validation failed');
+            } else {
+              setCodeSizeError(null);
+            }
+          }
+        }
       } catch (error: any) {
         if (error.response?.status === 403) {
           // Room exists but is paused and requires authentication
