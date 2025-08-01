@@ -10,8 +10,6 @@ services:
       - PISTON_API_URL=http://host.docker.internal:2000/api/v2/execute
       - DATABASE_URL=postgresql://agale@host.docker.internal:5432/codepad
     restart: unless-stopped
-    volumes:
-      - language-servers:/app/language-servers
     networks:
       - codecrush-network
     healthcheck:
@@ -33,8 +31,6 @@ services:
       - PISTON_API_URL=http://host.docker.internal:2000/api/v2/execute
       - DATABASE_URL=postgresql://agale@host.docker.internal:5432/codepad
     restart: unless-stopped
-    volumes:
-      - language-servers:/app/language-servers
     networks:
       - codecrush-network
     healthcheck:
@@ -59,8 +55,6 @@ services:
     networks:
       - codecrush-network
 
-volumes:
-  language-servers:
 
 networks:
   codecrush-network:

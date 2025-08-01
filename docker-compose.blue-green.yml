@@ -8,8 +8,6 @@ services:
     environment:
       - PORT=3001
     restart: unless-stopped
-    volumes:
-      - language-servers:/app/language-servers
     networks:
       - codecrush-network
     healthcheck:
@@ -29,8 +27,6 @@ services:
     environment:
       - PORT=3002
     restart: unless-stopped
-    volumes:
-      - language-servers:/app/language-servers
     networks:
       - codecrush-network
     healthcheck:
@@ -58,8 +54,6 @@ services:
     networks:
       - codecrush-network
 
-volumes:
-  language-servers:
 
 networks:
   codecrush-network:

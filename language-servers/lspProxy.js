@@ -210,6 +210,11 @@ class LSPProxy {
       console.log(`[${new Date().toISOString()}] [LSP Proxy] Ensuring coroutines dependencies are available in Gradle cache for room ${roomId}`);
       await this.ensureCoroutinesInGradleCache(roomWorkspaceDir);
       console.log(`[${new Date().toISOString()}] [LSP Proxy] Coroutines cache population completed for room ${roomId}`);
+
+      // Ensure Kotlin stdlib is also available to avoid resolution failures inside Docker
+      console.log(`[${new Date().toISOString()}] [LSP Proxy] Ensuring Kotlin stdlib is available in Gradle cache for room ${roomId}`);
+      await this.ensureKotlinStdlibInGradleCache();
+      console.log(`[${new Date().toISOString()}] [LSP Proxy] Kotlin stdlib cache population completed for room ${roomId}`);
     }
 
     // Start language server AFTER workspace is ready
@@ -252,29 +257,10 @@ class LSPProxy {
     console.log(`[${new Date().toISOString()}] [LSP Proxy] Initializing language server for client ${clientId}`);
     await this.initializeLanguageServer(clientId);
 
-    // For Kotlin, always force a project import to ensure dependencies are resolved
-    if (language === 'kotlin') {
-      console.log(`[${new Date().toISOString()}] [LSP Proxy] Forcing Gradle project import for workspace: ${workspaceUri}`);
-      try {
-        await this.sendRequest(clientId, 'workspace/executeCommand', {
-          command: 'java.project.import', // Command supported by JDT-based servers
-          arguments: [workspaceUri]
-        });
-        console.log(`[${new Date().toISOString()}] [LSP Proxy] Gradle project import command sent successfully.`);
-        
-        // Give Kotlin LS time to process the Gradle project and index dependencies
-        const delayMs = 3000; // 3 seconds should be sufficient for basic indexing
-        console.log(`[${new Date().toISOString()}] [LSP Proxy] Waiting ${delayMs}ms for Kotlin LS to process Gradle project...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-        console.log(`[${new Date().toISOString()}] [LSP Proxy] Kotlin LS initialization delay completed`);
-      } catch (error) {
-        console.error(`[${new Date().toISOString()}] [LSP Proxy] Failed to execute project import command:`, error);
-        // Even if project import fails, give some time for basic Kotlin stdlib indexing
-        const fallbackDelay = 2000;
-        console.log(`[${new Date().toISOString()}] [LSP Proxy] Using fallback delay of ${fallbackDelay}ms for Kotlin LS indexing`);
-        await new Promise(resolve => setTimeout(resolve, fallbackDelay));
-      }
-    }
+    // Skipping explicit Gradle project import for Kotlin – language server often works fine without it and
+    // the import sometimes hangs inside Docker due to missing IDE extensions.
+    // If, in future, we need project import we can re-enable this block behind a feature flag.
+
 
     // Handle client disconnect
     socket.on('disconnect', () => {
@@ -314,7 +300,7 @@ class LSPProxy {
     
     // Create working Gradle project that should actually resolve dependencies
     const buildGradleContent = `plugins {
-    kotlin("jvm") version "2.1.0"
+    kotlin("jvm") version "1.9.24"
 }
 
 repositories {
@@ -322,7 +308,7 @@ repositories {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.6.21")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 }
 
@@ -410,6 +396,64 @@ kotlin.incremental=true
       }
     } catch (error) {
       console.error(`[${new Date().toISOString()}] [LSP Proxy] Error ensuring coroutines in Gradle cache:`, error);
+    }
+  }
+
+  // Pre-download kotlin-stdlib into the Gradle cache so the language server can resolve it even when offline
+  async ensureKotlinStdlibInGradleCache() {
+    try {
+      console.log(`[${new Date().toISOString()}] [LSP Proxy] Pre-downloading kotlin-stdlib to Gradle cache`);
+      const homeDir = require('os').homedir();
+      const groupDir = path.join(homeDir, '.gradle', 'caches', 'modules-2', 'files-2.1', 'org.jetbrains.kotlin');
+      const version = '1.6.21';
+      const variants = [
+        { artifact: 'kotlin-stdlib', jar: `kotlin-stdlib-${version}.jar` },
+        { artifact: 'kotlin-stdlib-jdk8', jar: `kotlin-stdlib-jdk8-${version}.jar` },
+        { artifact: 'kotlin-stdlib-jdk7', jar: `kotlin-stdlib-jdk7-${version}.jar` }
+      ];
+
+      const axios = (await import('../server/node_modules/axios/index.js')).default;
+
+      for (const { artifact, jar } of variants) {
+        const cacheDir = path.join(groupDir, artifact, version);
+        const cachedJarPath = path.join(cacheDir, jar);
+        if (!fs.existsSync(cachedJarPath)) {
+          console.log(`[${new Date().toISOString()}] [LSP Proxy] Downloading ${artifact}/${version}/${jar} to Gradle cache`);
+          if (!fs.existsSync(cacheDir)) {
+            fs.mkdirSync(cacheDir, { recursive: true });
+          }
+          const mavenUrl = `https://repo1.maven.org/maven2/org/jetbrains/kotlin/${artifact}/${version}/${jar}`;
+          try {
+            const response = await axios({ method: 'get', url: mavenUrl, responseType: 'stream' });
+            await new Promise((resolve, reject) => {
+              const writer = fs.createWriteStream(cachedJarPath);
+              response.data.pipe(writer);
+              writer.on('finish', resolve);
+              writer.on('error', reject);
+            });
+            console.log(`[${new Date().toISOString()}] [LSP Proxy] Downloaded ${jar} to Gradle cache`);
+          } catch (downloadError) {
+            console.warn(`[${new Date().toISOString()}] [LSP Proxy] Failed to download ${jar}:`, downloadError.message);
+          }
+        }
+
+        // Also copy into local Maven repo so Maven-based resolution succeeds
+        try {
+          const mavenDir = path.join(homeDir, '.m2', 'repository', 'org', 'jetbrains', 'kotlin', artifact, version);
+          const mavenJarPath = path.join(mavenDir, jar);
+          if (!fs.existsSync(mavenJarPath)) {
+            if (!fs.existsSync(mavenDir)) {
+              fs.mkdirSync(mavenDir, { recursive: true });
+            }
+            fs.copyFileSync(cachedJarPath, mavenJarPath);
+            console.log(`[${new Date().toISOString()}] [LSP Proxy] Copied ${jar} to local Maven repo`);
+          }
+        } catch (copyErr) {
+          console.warn(`[${new Date().toISOString()}] [LSP Proxy] Failed to copy ${jar} to Maven repo:`, copyErr.message);
+        }
+      }
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] [LSP Proxy] Error ensuring kotlin-stdlib in Gradle cache:`, error);
     }
   }
 
@@ -706,6 +750,8 @@ kotlin.incremental=true
       params
     };
 
+    console.log(`[${new Date().toISOString()}] [LSP Proxy] --> sendRequest ${method} (id=${requestId})`);
+
     return new Promise((resolve, reject) => {
       this.messageHandlers.set(requestId, { clientId, resolve, reject, method });
       
@@ -714,10 +760,12 @@ kotlin.incremental=true
       
       connection.languageServer.stdin.write(messageWithHeader);
       
-      // Increase timeout for long-running operations like 'initialize'
-      const timeoutMs = method === 'initialize' ? 60000 : 10000;
+      // Allow more time for Kotlin LS in Docker which can be slow resolving dependencies
+      const timeoutMs = method === 'initialize' ? 90000 : 40000;
       setTimeout(() => {
         if (this.messageHandlers.has(requestId)) {
+          const handler = this.messageHandlers.get(requestId);
+          console.error(`[${new Date().toISOString()}] [LSP Proxy] !! Request timeout for ${handler?.method} (id=${requestId}) after ${timeoutMs}ms`);
           this.messageHandlers.delete(requestId);
           reject(new Error('Request timeout'));
         }
