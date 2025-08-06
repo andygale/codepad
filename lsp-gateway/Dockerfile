@@ -1,9 +1,15 @@
 # LSP Gateway container based on Node + Theia LSP server
 FROM node:20-slim
 
-# Install JDK 17 for Java/Kotlin LS
-RUN apt-get update && apt-get install -y openjdk-17-jre-headless curl unzip tar \
-  && rm -rf /var/lib/apt/lists/*
+# Install JDK 17 and Gradle for Java/Kotlin LS dependency resolution
+RUN apt-get update && apt-get install -y openjdk-17-jre-headless curl unzip tar wget \
+  && rm -rf /var/lib/apt/lists/* \
+  && echo "Installing Gradle..." \
+  && wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip -O /tmp/gradle.zip \
+  && unzip -q /tmp/gradle.zip -d /opt \
+  && rm /tmp/gradle.zip \
+  && ln -s /opt/gradle-8.4/bin/gradle /usr/local/bin/gradle \
+  && gradle --version
 
 WORKDIR /usr/src/app
 

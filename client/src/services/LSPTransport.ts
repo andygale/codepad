@@ -83,12 +83,14 @@ export class LSPTransport {
     this.ws.send(JSON.stringify(req));
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
+      // Use longer timeout for initialize requests (Kotlin LS needs time for dependency resolution)
+      const timeoutMs = method === 'initialize' ? 60000 : 10000;
       setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id);
           reject(new Error('LSP request timeout'));
         }
-      }, 10000);
+      }, timeoutMs);
     });
   }
 

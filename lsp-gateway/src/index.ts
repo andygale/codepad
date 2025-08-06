@@ -13,6 +13,66 @@ async function spawnLanguageServer(language: string, sessionId?: string) {
 
   if (language === 'kotlin') {
     cmd = '/opt/kotlin-ls/server/bin/kotlin-language-server';
+    
+    // Create unique workspace for Kotlin session
+    workspaceDir = `/tmp/kotlin-workspace-${sessionId || 'default'}`;
+    projectDir = path.join(workspaceDir, 'project');
+    
+    fs.mkdirSync(workspaceDir, { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
+    
+    // Create standard Gradle Kotlin project structure
+    const srcMainKotlinDir = path.join(projectDir, 'src', 'main', 'kotlin');
+    fs.mkdirSync(srcMainKotlinDir, { recursive: true });
+    
+    // Also create a src directory for compatibility with the existing URI mapping
+    const srcDir = path.join(projectDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    
+    // Create a complete Gradle project structure for Kotlin
+    const gradlePropsFile = path.join(projectDir, 'gradle.properties');
+    const gradlePropsContent = `kotlin.code.style=official
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+org.gradle.caching=true`;
+    fs.writeFileSync(gradlePropsFile, gradlePropsContent, 'utf8');
+    
+    // Create build.gradle.kts with Kotlin and coroutines support
+    const buildGradleFile = path.join(projectDir, 'build.gradle.kts');
+    const buildGradleContent = `plugins {
+    kotlin("jvm") version "1.9.10"
+    application
+}
+
+group = "org.example"
+version = "1.0-SNAPSHOT"
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("org.jetbrains.kotlin:kotlin-stdlib")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    testImplementation("org.jetbrains.kotlin:kotlin-test")
+}
+
+tasks.test {
+    useJUnitPlatform()
+}
+
+kotlin {
+    jvmToolchain(17)
+}
+
+application {
+    mainClass.set("MainKt")
+}`;
+    fs.writeFileSync(buildGradleFile, buildGradleContent, 'utf8');
+    
+    // Create settings.gradle.kts
+    const settingsGradleFile = path.join(projectDir, 'settings.gradle.kts');
+    const settingsGradleContent = `rootProject.name = "kotlin-project"`;
+    fs.writeFileSync(settingsGradleFile, settingsGradleContent, 'utf8');
   } else if (language === 'java') {
     // Search recursively for the Equinox launcher jar
     const root = '/opt/jdt-language-server';
@@ -175,8 +235,8 @@ async function spawnLanguageServer(language: string, sessionId?: string) {
   console.log(`Spawned ${language} LS pid=${proc.pid} for session ${sessionId || 'default'}`);
   
   // Store workspace info for this session
-  (proc as any).workspaceDir = language === 'java' ? workspaceDir : undefined;
-  (proc as any).projectDir = language === 'java' ? projectDir : undefined;
+  (proc as any).workspaceDir = (language === 'java' || language === 'kotlin') ? workspaceDir : undefined;
+  (proc as any).projectDir = (language === 'java' || language === 'kotlin') ? projectDir : undefined;
   return proc;
 }
 
@@ -218,12 +278,12 @@ async function main() {
                 const json = typeof data === 'string' ? data : data.toString();
         console.log(`[CLIENT -> LS] ${json}`);
          
-         // For Java sessions, intercept initialize request to fix workspace paths
-         if (language === 'java' && (lsProc as any).workspaceDir && (lsProc as any).projectDir) {
+         // For Java and Kotlin sessions, intercept initialize request to fix workspace paths
+         if ((language === 'java' || language === 'kotlin') && (lsProc as any).workspaceDir && (lsProc as any).projectDir) {
           try {
             const message = JSON.parse(json);
             if (message.method === 'initialize') {
-              console.log(`[java LS] Original initialize request:`, JSON.stringify(message.params, null, 2));
+              console.log(`[${language} LS] Original initialize request:`, JSON.stringify(message.params, null, 2));
               // Update initialize request with correct workspace
                              // Both rootUri and workspaceFolders point to the same directory (workspace = project)
                message.params.rootUri = `file://${(lsProc as any).projectDir}`;
@@ -233,8 +293,8 @@ async function main() {
                    name: 'project'
                  }
                ];
-              console.log(`[java LS] Updated initialize request - rootUri: ${message.params.rootUri}, workspaceDir: ${(lsProc as any).workspaceDir}, projectDir: ${(lsProc as any).projectDir}`);
-              console.log(`[java LS] Updated initialize request params:`, JSON.stringify(message.params, null, 2));
+              console.log(`[${language} LS] Updated initialize request - rootUri: ${message.params.rootUri}, workspaceDir: ${(lsProc as any).workspaceDir}, projectDir: ${(lsProc as any).projectDir}`);
+              console.log(`[${language} LS] Updated initialize request params:`, JSON.stringify(message.params, null, 2));
               
               // Send corrected message to LSP server
               const correctedJson = JSON.stringify(message);
@@ -243,7 +303,7 @@ async function main() {
               lsProc.stdin.write(Buffer.concat([header, payload]));
               
               // Also send workspace configuration to client immediately
-              console.log(`[java LS] Sending workspace config to client: ${(lsProc as any).projectDir}`);
+              console.log(`[${language} LS] Sending workspace config to client: ${(lsProc as any).projectDir}`);
               ws.send(JSON.stringify({
                 jsonrpc: '2.0',
                 method: 'workspace/didChangeConfiguration',
@@ -254,6 +314,35 @@ async function main() {
                   }
                 }
               }));
+              
+              // For Kotlin, also send a didChangeWatchedFiles to trigger project analysis
+              if (language === 'kotlin') {
+                setTimeout(() => {
+                  console.log(`[${language} LS] Triggering Kotlin project analysis`);
+                  // Notify about gradle files to trigger dependency resolution
+                  const buildGradleUri = `file://${(lsProc as any).projectDir}/build.gradle.kts`;
+                  lsProc.stdin.write(Buffer.concat([
+                    Buffer.from(`Content-Length: ${JSON.stringify({
+                      jsonrpc: '2.0',
+                      method: 'workspace/didChangeWatchedFiles',
+                      params: {
+                        changes: [
+                          { uri: buildGradleUri, type: 1 } // Created
+                        ]
+                      }
+                    }).length}\r\n\r\n`, 'utf8'),
+                    Buffer.from(JSON.stringify({
+                      jsonrpc: '2.0',
+                      method: 'workspace/didChangeWatchedFiles',
+                      params: {
+                        changes: [
+                          { uri: buildGradleUri, type: 1 } // Created
+                        ]
+                      }
+                    }), 'utf8')
+                  ]));
+                }, 1000);
+              }
               
               return; // Don't process the original message
             }
@@ -296,8 +385,8 @@ async function main() {
         console.log(`[${language} LS] client disconnected, killing process for session ${sessionId}`);
         lsProc.kill();
         
-        // Clean up workspace directory for Java sessions
-        if (language === 'java' && (lsProc as any).workspaceDir) {
+        // Clean up workspace directory for Java and Kotlin sessions
+        if ((language === 'java' || language === 'kotlin') && (lsProc as any).workspaceDir) {
           try {
             fs.rmSync((lsProc as any).workspaceDir, { recursive: true, force: true });
             console.log(`[${language} LS] cleaned up workspace ${(lsProc as any).workspaceDir}`);

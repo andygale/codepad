@@ -44,11 +44,12 @@ export class LSPClient {
     const ext = extMap[this.language] || 'txt';
     const fileName = this.language === 'java' ? 'Main.java' : `${this.roomId}.${ext}`;
 
-    if (this.language === 'java' && this.projectDir) {
+    // Use projectDir for both Java and Kotlin when available
+    if ((this.language === 'java' || this.language === 'kotlin') && this.projectDir) {
       return `file://${this.projectDir}/src/${fileName}`;
     }
     
-    // Fallback for non-Java or before workspace is configured
+    // Fallback for other languages or before workspace is configured
     return `file:///workspace/${fileName}`;
   }
 
@@ -217,8 +218,8 @@ export class LSPClient {
         this.projectDir = message.params.settings.projectDir;
         console.log(`[${new Date().toISOString()}] [LSP Client] Received workspace config: ${this.projectDir}`);
         
-        // Only send didOpen for Java if we haven't already sent it and we're connected
-        if (this.language === 'java' && !this.hasOpenedDocument) {
+        // Send didOpen for Java and Kotlin if we haven't already sent it and we're connected
+        if ((this.language === 'java' || this.language === 'kotlin') && !this.hasOpenedDocument) {
           if (this.isConnected) {
             this.sendNotification('textDocument/didOpen', {
               textDocument: {
