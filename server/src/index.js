@@ -12,7 +12,9 @@ const config = require('./config');
 const apiRoutes = require('./routes/api');
 const authRoutes = require('./routes/authRoutes');
 const setupRoomHandlers = require('./sockets/roomHandlers');
-const LanguageServerService = require('./services/languageServerService');
+
+const roomService = require('./services/roomService');
+const WebSocket = require('ws');
 const dbService = require('./services/dbService');
 
 const app = express();
@@ -53,8 +55,7 @@ const io = new Server(server, {
 });
 
 // Initialize Language Server Service
-const languageServerService = new LanguageServerService();
-languageServerService.initialize();
+
 
 // Apply middleware
 app.use(sessionMiddleware);
@@ -94,7 +95,66 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   setupRoomHandlers(io, socket);
-  languageServerService.handleSocketConnection(io, socket);
+
+});
+
+// ---------------------------
+// WebSocket proxy for LSP
+// ---------------------------
+console.log('🔧 LSP Proxy enabled');
+const lspWSS = new WebSocket.Server({ noServer: true });
+
+server.on('upgrade', async (req, socket, head) => {
+  console.log(`🔧 [LSP Proxy] Raw upgrade URL: ${req.url}`);
+  const upgradeStart = Date.now();
+  try {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const match = url.pathname.match(/^\/lsp\/(kotlin|java)\/([A-Za-z0-9]+)\/?$/);
+    if (!match) {
+      // Not an LSP upgrade path, let other handlers proceed
+      return;
+      // Not an LSP path – let other handlers (e.g., Socket.IO) deal with it
+      return;
+    }
+    const [, lang, roomId] = match;
+    console.log(`🔧 [LSP Proxy] Upgrade requested – lang=${lang}, room=${roomId}`);
+
+    // Enforce room not paused
+    const room = await roomService.getRoom(roomId);
+    if (!room || room.is_paused) {
+      socket.destroy();
+      return;
+    }
+
+    // Connect to gateway
+    const gatewayHost = process.env.LSP_GATEWAY_HOST || 'lsp-gateway';
+    const gatewayUrl = `ws://${gatewayHost}:3000/${lang}`;
+    console.log(`🔧 [LSP Proxy] Connecting to gateway ${gatewayUrl}`);
+    const upstream = new WebSocket(gatewayUrl);
+
+    upstream.on('open', () => {
+      console.log('🔧 [LSP Proxy] Gateway connection open, completing upgrade');
+      lspWSS.handleUpgrade(req, socket, head, (clientWs) => {
+        // Pipe messages both ways
+        clientWs.on('message', (data) => upstream.send(data));
+        upstream.on('message', (data) => clientWs.send(data));
+        const cleanup = () => {
+          clientWs.close();
+          upstream.close();
+        };
+        clientWs.on('close', cleanup);
+        upstream.on('close', cleanup);
+      });
+    });
+
+    upstream.on('error', (err) => {
+      console.error('LSP proxy: failed to connect to gateway', err.message);
+      if (!socket.destroyed) socket.destroy();
+    });
+  } catch (err) {
+    console.error('LSP proxy upgrade error', err);
+    socket.destroy();
+  }
 });
 
 // Serve static files from the React app
@@ -114,18 +174,12 @@ app.get('/api/info', (req, res) => {
     endpoints: {
       execute: 'POST /api/execute',
       info: 'GET /api/info',
-      languageServer: 'GET /api/language-server/status',
       websocket: 'ws://localhost:' + (config.port || 3001),
     },
     pistonApi: config.pistonApiUrl,
-    languageServer: languageServerService.getStatus(),
   });
 });
 
-// Language Server status endpoint
-app.get('/api/language-server/status', (req, res) => {
-  res.json(languageServerService.getStatus());
-});
 
 // Start server
 const PORT = config.port || 3001;
@@ -139,7 +193,7 @@ server.listen(PORT, '0.0.0.0', () => {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down server...');
-  await languageServerService.shutdown();
+
   server.close(() => {
     console.log('✅ Server closed');
     process.exit(0);
@@ -148,7 +202,7 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down server...');
-  await languageServerService.shutdown();
+
   server.close(() => {
     console.log('✅ Server closed');
     process.exit(0);

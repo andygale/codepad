@@ -9,6 +9,7 @@ services:
       - PORT=3001
       - PISTON_API_URL=http://host.docker.internal:2000/api/v2/execute
       - DATABASE_URL=postgresql://agale@host.docker.internal:5432/codepad
+      - LSP_GATEWAY_HOST=lsp-gateway
     restart: unless-stopped
     networks:
       - codecrush-network
@@ -30,6 +31,7 @@ services:
       - PORT=3002
       - PISTON_API_URL=http://host.docker.internal:2000/api/v2/execute
       - DATABASE_URL=postgresql://agale@host.docker.internal:5432/codepad
+      - LSP_GATEWAY_HOST=lsp-gateway
     restart: unless-stopped
     networks:
       - codecrush-network
@@ -40,6 +42,20 @@ services:
       retries: 3
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  lsp-gateway:
+    build:
+      context: ./lsp-gateway
+    restart: unless-stopped
+    networks:
+      - codecrush-network
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   nginx:
     image: nginx:alpine

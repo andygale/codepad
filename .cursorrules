@@ -17,7 +17,7 @@ This is a collaborative code editor application built with React frontend and No
 ## Project Structure
 - `/client/` - React frontend application
 - `/server/` - Node.js backend with Socket.IO
-- `/language-servers/` - Kotlin Language Server for LSP integration
+- `/lsp-gateway/` - Containerized LSP gateway for Kotlin/Java language servers
 - Both client and server have their own package.json files
 
 ## Key Technologies
@@ -25,7 +25,7 @@ This is a collaborative code editor application built with React frontend and No
 - Backend: Node.js, Express, Socket.IO, WebSocket (for LSP)
 - Database: PostgreSQL with migrations
 - Code Execution: Piston API integration
-- Language Support: Enhanced Kotlin support with LSP integration
+- Language Support: Enhanced Kotlin and Java support with LSP gateway integration
 
 ## Development Guidelines
 - Use TypeScript for type safety
@@ -63,5 +63,5 @@ This is a collaborative code editor application built with React frontend and No
 - Multiple programming language support
 - Code execution via Piston API
 - Session playback functionality
-- Enhanced Kotlin language support with LSP
+- Enhanced Kotlin and Java language support with LSP
 - User authentication and room management 

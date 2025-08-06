@@ -9,6 +9,7 @@ import PlaybackModal from './PlaybackModal';
 import UserEvents from './UserEvents';
 import Split from 'react-split';
 import { LSPClient } from './services/lspClient';
+import { LSPTransport } from './services/LSPTransport';
 import { validateCodeSize, formatBytes } from './utils/validation';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
@@ -690,8 +691,14 @@ function Room() {
 
       console.log(`[Room] Initializing LSP for language: ${language}, room: ${roomId}`);
 
+      // Create dedicated WebSocket transport for LSP traffic
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      const wsUrl = `${wsProtocol}://${window.location.host}/lsp/${language}/${roomId}`;
+      const lspSocket = new WebSocket(wsUrl);
+      const transport = new LSPTransport(lspSocket);
+
       lspClientRef.current = new LSPClient(
-        socketRef.current,
+        transport,
         editorRef.current,
         language,
         roomId,

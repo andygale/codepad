@@ -21,6 +21,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "ws": "^8.13.0",
     "adm-zip": "^0.5.12",
     "axios": "^1.7.2",
     "connect-pg-simple": "^10.0.0",

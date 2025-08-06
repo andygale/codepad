@@ -1,14 +1,9 @@
 # Multi-stage build for production
 FROM node:20-bookworm AS builder
 
-# Install Java 21 from Eclipse Temurin (required for Java Language Server)
+# Install basic dependencies for the application
 RUN apt-get update && \
-    apt-get install -y wget apt-transport-https && \
-    mkdir -p /etc/apt/keyrings && \
-    wget -O - https://packages.adoptium.net/artifactory/api/gpg/key/public | tee /etc/apt/keyrings/adoptium.asc && \
-    echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" | tee /etc/apt/sources.list.d/adoptium.list && \
-    apt-get update && \
-    apt-get install -y temurin-21-jdk libgtk-3-0 libxss1 libxtst6 libnss3 libasound2 libxrandr2 libxdamage1 libxcomposite1 libxfixes3 && \
+    apt-get install -y curl && \
     rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -30,15 +25,7 @@ RUN yarn install:all
 # Copy the rest of the source code
 COPY . .
 
-# Run the language server installation script AFTER copying the code.
-# This ensures we download the correct architecture and don't overwrite it.
-RUN node language-servers/install.js
-
-# Verify that coroutines JARs were installed properly
-RUN echo "🔍 Verifying language server installations..." && \
-    ls -la language-servers/kotlin-language-server/server/lib/kotlinx-coroutines-core-jvm-1.6.4.jar || \
-    (echo "❌ ERROR: Kotlin coroutines JAR (1.6.4) not found in language server lib directory" && exit 1) && \
-    echo "✅ Kotlin coroutines JAR (1.6.4) verified"
+# No additional setup needed - LSP functionality is handled by the lsp-gateway service
 
 # Build the application
 # The ARG values are automatically available as environment variables during this step
@@ -47,23 +34,17 @@ RUN yarn docker:build
 # Production stage  
 FROM node:20-bookworm
 
-# Install Java 21 from Eclipse Temurin and GUI libraries
+# Install curl for health checks
 RUN apt-get update && \
-    apt-get install -y wget apt-transport-https && \
-    mkdir -p /etc/apt/keyrings && \
-    wget -O - https://packages.adoptium.net/artifactory/api/gpg/key/public | tee /etc/apt/keyrings/adoptium.asc && \
-    echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" | tee /etc/apt/sources.list.d/adoptium.list && \
-    apt-get update && \
-    apt-get install -y temurin-21-jdk libgtk-3-0 libxss1 libxtst6 libnss3 libasound2 libxrandr2 libxdamage1 libxcomposite1 libxfixes3 && \
+    apt-get install -y curl && \
     rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy built application and newly downloaded language servers
+# Copy built application
 COPY --from=builder /app/client/build ./client/build
 COPY --from=builder /app/server ./server
-COPY --from=builder /app/language-servers ./language-servers
 COPY --from=builder /app/package.json ./
 
 # SECURITY: Copy the AWS RDS CA certificate into the image

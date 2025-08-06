@@ -7,11 +7,8 @@
 /client/build
 /server/dist
 
-# Language Servers
-# Ignore the downloaded server binaries and any generated workspace files
-/language-servers/jdt-language-server
-/language-servers/kotlin-language-server
-/language-servers/workspace
+# Legacy language-servers directory (removed - LSP now handled by lsp-gateway service)
+# This section removed as language-servers directory no longer exists
 
 # Logs
 npm-debug.log*

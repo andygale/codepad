@@ -2,13 +2,13 @@
 
 ## ✅ Implementation Complete
 
-Context-aware auto-completion and error detection for Kotlin and Java has been successfully implemented using Language Server Protocol (LSP) integration.
+Context-aware auto-completion and error detection for Kotlin and Java has been successfully implemented using Language Server Protocol (LSP) integration via a dedicated LSP Gateway service.
 
 ## 🎯 Features Implemented
 
 ### IntelliSense Features
 - **Auto-completion**: Smart code suggestions with `Ctrl+Space` or automatic triggers
-- **Error detection**: Real-time syntax and semantic error highlighting
+- **Error detection**: Real-time syntax and semantic error highlighting with red squiggles
 - **Hover information**: Type definitions, documentation, and signatures on hover
 - **Diagnostics**: Live problem detection with error/warning markers
 - **Collaborative**: IntelliSense state synchronized across all users in real-time
@@ -20,48 +20,53 @@ Context-aware auto-completion and error detection for Kotlin and Java has been s
 
 ## 🏗️ Architecture
 
-### Components
-1. **Language Server Manager** (`language-servers/languageServerManager.js`)
-   - Manages Kotlin and Java language server processes
-   - Handles automatic download and installation
-   - Process lifecycle management
+### New LSP Gateway Architecture
+The IntelliSense implementation has been completely rewritten using a modern, containerized architecture:
 
-2. **LSP Proxy** (`language-servers/lspProxy.js`)
-   - WebSocket bridge between Monaco Editor and language servers
-   - Handles LSP protocol translation
-   - Manages multiple client connections
+1. **LSP Gateway Service** (`lsp-gateway` Docker container)
+   - Dedicated Go-based LSP gateway service
+   - Hosts shared Kotlin and Java language server processes
+   - Provides WebSocket endpoints for each language
+   - Independent health monitoring and auto-recovery
 
-3. **Language Server Service** (`server/src/services/languageServerService.js`)
-   - Socket.IO integration for real-time LSP communication
-   - Room-based language server management
-   - Client connection tracking
+2. **Simple WebSocket Proxy** (`server/src/index.js`)
+   - Lightweight 58-line proxy implementation
+   - Routes browser LSP traffic to the gateway service
+   - Enforces room pause checks
+   - Handles client connection lifecycle
 
-4. **LSP Client** (`client/src/services/lspClient.ts`)
-   - Monaco Editor integration
+3. **LSP Client** (`client/src/services/lspClient.ts`)
+   - Monaco Editor integration with WebSocket transport
    - LSP protocol handling on client side
    - Completion, hover, and diagnostics providers
+   - Deferred didOpen handling to prevent race conditions
 
-5. **Monaco Integration** (`client/src/Room.tsx`)
+4. **Monaco Integration** (`client/src/Room.tsx`)
    - Automatic LSP connection based on language selection
-   - Visual status indicators
+   - Visual status indicators and marker management
    - Seamless integration with existing editor
+
+### Key Improvements
+- **🚀 Simplified**: 58 lines vs 1500+ lines of legacy proxy code
+- **🐳 Containerized**: Language servers run in isolated Docker container
+- **🔧 Reliable**: Fixed race conditions and connection issues
+- **📈 Scalable**: Independent service scaling and health monitoring
 
 ## 📦 Installation & Usage
 
 ### Development Setup
 ```bash
-# Install all dependencies including language servers
+# Install all dependencies
 yarn install:all
-yarn install:language-servers
 
-# Start development server
+# Start development server (includes LSP gateway via Docker)
 yarn dev
 ```
 
 ### Production Build
 ```bash
-# Build for production (includes language server installation)
-yarn build:prod
+# Build for production
+yarn build
 
 # Start production server
 yarn start
@@ -69,22 +74,29 @@ yarn start
 
 ### Docker Deployment
 ```bash
-# Build and run with Docker Compose
-docker-compose up --build
+# Build and run with Docker Compose (includes LSP gateway)
+docker-compose -f docker-compose.local.yml up --build
 ```
 
 ## 🔧 How It Works
 
-1. **Language Detection**: When user selects Kotlin or Java, LSP client automatically connects
-2. **Server Launch**: Language server process starts on-demand and shared across room users
-3. **Real-time Sync**: All IntelliSense features work collaboratively across multiple users
-4. **Error Handling**: Graceful fallbacks when language servers are unavailable
+1. **Service Startup**: LSP Gateway container starts with dedicated language servers
+2. **Language Detection**: When user selects Kotlin or Java, LSP client connects via WebSocket
+3. **Proxy Routing**: Main server proxies LSP traffic to gateway service
+4. **Real-time Sync**: All IntelliSense features work collaboratively across multiple users
+5. **Error Handling**: Graceful fallbacks and connection recovery
+
+### LSP Message Flow
+```
+Monaco Editor ↔ LSP Client ↔ WebSocket ↔ Main Server Proxy ↔ LSP Gateway ↔ Language Server
+```
 
 ## 🎮 User Experience
 
 ### Visual Indicators
 - **Green dot**: IntelliSense connected and active
 - **Orange dot**: IntelliSense connecting/loading
+- **Red squiggles**: Real-time error highlighting
 - **No indicator**: Language not supported for IntelliSense
 
 ### Keyboard Shortcuts
@@ -95,46 +107,52 @@ docker-compose up --build
 ## 🚀 Performance
 
 ### Resource Usage
-- **Kotlin Language Server**: ~512MB RAM
-- **Java Language Server**: ~1GB RAM
-- **Shared Process**: Single server instance per room language
-- **Auto-scaling**: Servers start/stop based on usage
+- **LSP Gateway Container**: ~2GB RAM (hosts both language servers)
+- **Main Server**: Minimal overhead (lightweight proxy)
+- **Shared Process**: Single language server instance per language
+- **Auto-scaling**: Gateway service scales independently
 
 ### Optimization Features
-- Process sharing across users
-- Automatic server lifecycle management
-- Efficient LSP message handling
+- Containerized language server isolation
+- Efficient WebSocket message routing
 - Monaco Editor performance optimizations
+- Race condition prevention in LSP client
 
 ## 🔒 Security
 
-- Language servers run in isolated processes
-- No file system access outside workspace
-- Network isolation via Docker
+- Language servers run in isolated Docker container
+- No file system access outside container workspace
+- Network isolation via Docker networking
 - Input sanitization and validation
+- Room pause enforcement at proxy level
 
 ## 📊 Status & Monitoring
 
-Check language server status:
+Check LSP Gateway status:
 ```bash
-curl http://localhost:3001/api/language-server/status
+curl http://localhost:3000/healthz
+```
+
+Check main server status:
+```bash
+curl http://localhost:5000/api/info
 ```
 
 Response includes:
-- Connected clients count
-- Active language servers
+- Service health status
+- Container connectivity
 - Supported languages
-- Memory usage statistics
+- Active connections
 
 ## 🎉 Ready for Production
 
 The implementation is production-ready with:
-- ✅ Automatic language server installation
+- ✅ Containerized LSP gateway service
 - ✅ Docker deployment support
-- ✅ Graceful error handling
-- ✅ Real-time collaboration
+- ✅ Graceful error handling and recovery
+- ✅ Real-time collaboration with red squiggles
 - ✅ Performance optimization
 - ✅ Security considerations
-- ✅ Monitoring and status endpoints
+- ✅ Independent service monitoring
 
-Your CodeCrush collaborative editor now provides full IntelliSense support for Kotlin and Java development!
+Your CodeCrush collaborative editor now provides full IntelliSense support for Kotlin and Java development with a modern, scalable architecture!

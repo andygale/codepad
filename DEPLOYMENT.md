@@ -4,11 +4,10 @@
 
 ### Development
 ```bash
-# Install dependencies and language servers
+# Install dependencies
 yarn install:all
-yarn install:language-servers
 
-# Start development server
+# Start development server (includes LSP gateway via Docker)
 yarn dev
 ```
 
@@ -156,14 +155,18 @@ docker-compose down
 
 ### Manual Installation
 ```bash
-# Install language servers manually
-yarn install:language-servers
+# No manual language server installation needed
+# LSP functionality is provided by the lsp-gateway Docker service
+docker-compose up lsp-gateway
 ```
 
 ### Troubleshooting
 ```bash
-# Check language server status
-curl http://localhost:3001/api/language-server/status
+# Check LSP gateway status
+curl http://localhost:3000/healthz
+
+# Check main server status
+curl http://localhost:5000/api/info
 
 # View server logs
 docker-compose logs codecrush

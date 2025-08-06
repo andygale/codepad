@@ -11,14 +11,8 @@ server/node_modules
 client/build
 server/dist
 
-# Language Server binaries (will be re-downloaded during build)
-language-servers/jdt-language-server/
-language-servers/kotlin-language-server/
-language-servers/workspace/
-language-servers/server.jar
-
-# But include the manager scripts
-!language-servers/*.js
+# Legacy language-servers directory (LSP now handled by lsp-gateway service)
+# This section removed as language-servers directory no longer exists
 
 # Logs
 npm-debug.log*
