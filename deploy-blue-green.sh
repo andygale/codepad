@@ -36,7 +36,7 @@ if [ "$ENV" == "local" ]; then
 else
     # Production environment settings
     DOCKER_COMPOSE_FILE="docker-compose.blue-green.yml"
-    NGINX_UPSTREAM_CONFIG="/etc/nginx/upstream.conf"
+    NGINX_UPSTREAM_CONFIG="/etc/nginx/conf.d/upstream.conf"
     APP_DIR="/home/ubuntu/codecrush"
     SUDO_CMD="sudo"
     echo "Using production configuration files (sudo enabled)."
@@ -58,6 +58,9 @@ switch_to_color() {
     local color=$1
     echo "Switching NGINX to $color..."
     
+    # Create the directory if it doesn't exist
+    $SUDO_CMD mkdir -p "$(dirname "$NGINX_UPSTREAM_CONFIG")"
+    
     # Create the new upstream configuration
     if [ "$color" == "blue" ]; then
         NEW_UPSTREAM="upstream codecrush_upstream { server codecrush-blue:3001; }"
@@ -68,24 +71,9 @@ switch_to_color() {
     # Update the upstream configuration file
     echo "$NEW_UPSTREAM" | $SUDO_CMD tee "$NGINX_UPSTREAM_CONFIG" > /dev/null
     
-    # Update nginx container configuration
-    echo "Updating nginx container configuration..."
-    docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx sh -c "echo '$NEW_UPSTREAM' > /etc/nginx/upstream.conf"
-
-    # Test and reload nginx
-    echo "Testing nginx configuration..."
-    if ! docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx nginx -t; then
-        echo "❌ Nginx configuration test failed!"
-        return 1
-    fi
-    
+    # Reload nginx
     echo "Reloading nginx configuration..."
-    if docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx nginx -s reload; then
-        echo "✅ Nginx reloaded successfully"
-    else
-        echo "❌ Nginx reload failed!"
-        return 1
-    fi
+    docker-compose -f "$DOCKER_COMPOSE_FILE" exec nginx nginx -s reload
     
     # Verify the change took effect
     echo "Verifying configuration change..."
@@ -104,6 +92,23 @@ switch_to_color() {
 
 echo "🚀 Starting Blue-Green deployment for CodeCrush..."
 cd "$APP_DIR"
+
+# 0. Ensure upstream.conf file exists (production only)
+if [ "$ENV" == "prod" ]; then
+    echo "🔧 Ensuring upstream.conf file exists..."
+    if [ ! -f "$NGINX_UPSTREAM_CONFIG" ]; then
+        echo "Creating initial upstream.conf file..."
+        echo "upstream codecrush_upstream { server codecrush-blue:3001; }" | $SUDO_CMD tee "$NGINX_UPSTREAM_CONFIG" > /dev/null
+    fi
+    
+    # Ensure it's a file, not a directory
+    if [ -d "$NGINX_UPSTREAM_CONFIG" ]; then
+        echo "❌ Error: $NGINX_UPSTREAM_CONFIG is a directory, not a file!"
+        echo "Removing directory and creating file..."
+        $SUDO_CMD rm -rf "$NGINX_UPSTREAM_CONFIG"
+        echo "upstream codecrush_upstream { server codecrush-blue:3001; }" | $SUDO_CMD tee "$NGINX_UPSTREAM_CONFIG" > /dev/null
+    fi
+fi
 
 # 1. Determine current active and inactive colors
 ACTIVE_COLOR=$(get_active_color)
@@ -127,6 +132,16 @@ echo "🏗️ Building and starting $INACTIVE_COLOR environment..."
 #export BUILDKIT_PROGRESS=plain
 time docker-compose -f "$DOCKER_COMPOSE_FILE" build "codecrush-$INACTIVE_COLOR"
 docker-compose -f "$DOCKER_COMPOSE_FILE" up -d --no-deps "codecrush-$INACTIVE_COLOR"
+
+# 3.5. Ensure nginx is running (production only)
+if [ "$ENV" == "prod" ]; then
+    echo "🔧 Ensuring nginx is running..."
+    if ! docker-compose -f "$DOCKER_COMPOSE_FILE" ps nginx | grep -q "Up"; then
+        echo "Starting nginx..."
+        docker-compose -f "$DOCKER_COMPOSE_FILE" up -d nginx
+        sleep 5  # Give nginx time to start
+    fi
+fi
 
 # 4. Wait for the new container to be healthy
 echo "⏳ Waiting for $INACTIVE_COLOR to become healthy..."

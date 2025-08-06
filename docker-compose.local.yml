@@ -63,7 +63,7 @@ services:
       - "5000:5000"
     volumes:
       - ./nginx.local.conf:/etc/nginx/nginx.conf:ro
-      - ./upstream.conf:/etc/nginx/upstream.conf
+      - ./conf.d:/etc/nginx/conf.d:ro
     depends_on:
       - codecrush-blue
       - codecrush-green

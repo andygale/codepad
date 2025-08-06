@@ -357,7 +357,7 @@ psql -h your-rds-endpoint -U codecrush codecrush < backup.sql
 ``` 
 
 AGALE - Setup BlueGreen Deployments
-echo "upstream codecrush_upstream { server codecrush-blue:3001; }" | sudo tee /etc/nginx/upstream.conf
+echo "upstream codecrush_upstream { server codecrush-blue:3001; }" | sudo tee /etc/nginx/conf.d/upstream.conf
 # For the very first deployment, you'll need to bring up both the blue environment and the nginx service.
 docker-compose -f docker-compose.blue-green.yml up -d codecrush-blue nginx
 
