@@ -13,66 +13,124 @@ async function spawnLanguageServer(language: string, sessionId?: string) {
 
   if (language === 'kotlin') {
     cmd = '/opt/kotlin-ls/server/bin/kotlin-language-server';
+  } else if (language === 'python') {
+    cmd = 'python3';
+    args = ['-m', 'pylsp'];
     
-    // Create unique workspace for Kotlin session
-    workspaceDir = `/tmp/kotlin-workspace-${sessionId || 'default'}`;
+    // Create unique workspace for Python session
+    workspaceDir = `/tmp/python-workspace-${sessionId || 'default'}`;
     projectDir = path.join(workspaceDir, 'project');
     
     fs.mkdirSync(workspaceDir, { recursive: true });
     fs.mkdirSync(projectDir, { recursive: true });
     
-    // Create standard Gradle Kotlin project structure
-    const srcMainKotlinDir = path.join(projectDir, 'src', 'main', 'kotlin');
-    fs.mkdirSync(srcMainKotlinDir, { recursive: true });
+    // Create basic Python project structure
+    const pythonSrcDir = path.join(projectDir, 'src');
+    fs.mkdirSync(pythonSrcDir, { recursive: true });
     
-    // Also create a src directory for compatibility with the existing URI mapping
-    const srcDir = path.join(projectDir, 'src');
-    fs.mkdirSync(srcDir, { recursive: true });
+    // Create a basic requirements.txt for potential dependencies
+    const requirementsFile = path.join(projectDir, 'requirements.txt');
+    const requirementsContent = `# Python project dependencies\n# Add your dependencies here\n`;
+    fs.writeFileSync(requirementsFile, requirementsContent, 'utf8');
     
-    // Create a complete Gradle project structure for Kotlin
-    const gradlePropsFile = path.join(projectDir, 'gradle.properties');
-    const gradlePropsContent = `kotlin.code.style=official
-org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-org.gradle.caching=true`;
-    fs.writeFileSync(gradlePropsFile, gradlePropsContent, 'utf8');
+    // Create pyproject.toml for modern Python project configuration
+    const pyprojectFile = path.join(projectDir, 'pyproject.toml');
+    const pyprojectContent = `[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codecrush-session"
+version = "0.1.0"
+description = "CodeCrush collaborative coding session"
+requires-python = ">=3.8"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = false
+warn_unused_configs = false
+ignore_missing_imports = true
+show_error_codes = false
+disallow_untyped_defs = false
+check_untyped_defs = false
+no_implicit_optional = false
+strict_optional = false
+
+[tool.pylsp-mypy]
+enabled = false
+live_mode = false
+strict = false
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.pycodestyle]
+max-line-length = 88
+ignore = "E203,E301,E302,E305,W503"
+
+[tool.pyflakes]
+# Disable pyflakes for scratch coding environment
+`;
+    fs.writeFileSync(pyprojectFile, pyprojectContent, 'utf8');
     
-    // Create build.gradle.kts with Kotlin and coroutines support
-    const buildGradleFile = path.join(projectDir, 'build.gradle.kts');
-    const buildGradleContent = `plugins {
-    kotlin("jvm") version "1.9.10"
-    application
-}
+    // Create improved setup.cfg for Python tools
+    const setupCfgFile = path.join(projectDir, 'setup.cfg');
+    const setupCfgContent = `[metadata]
+name = codecrush-session
+version = 0.1.0
 
-group = "org.example"
-version = "1.0-SNAPSHOT"
+[options]
+packages = find:
+python_requires = >=3.8
 
-repositories {
-    mavenCentral()
-}
+[tool:pytest]
+testpaths = tests
+python_files = test_*.py
+python_classes = Test*
+python_functions = test_*
 
-dependencies {
-    implementation("org.jetbrains.kotlin:kotlin-stdlib")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
-    testImplementation("org.jetbrains.kotlin:kotlin-test")
-}
+[mypy]
+python_version = 3.11
+warn_return_any = False
+warn_unused_configs = False
+ignore_missing_imports = True
+show_error_codes = False
+disallow_untyped_defs = False
+check_untyped_defs = False
+no_implicit_optional = False
+strict_optional = False
 
-tasks.test {
-    useJUnitPlatform()
-}
+[flake8]
+max-line-length = 88
+extend-ignore = E203,E301,E302,E305,W503
 
-kotlin {
-    jvmToolchain(17)
-}
-
-application {
-    mainClass.set("MainKt")
-}`;
-    fs.writeFileSync(buildGradleFile, buildGradleContent, 'utf8');
+[pycodestyle]
+max-line-length = 88
+ignore = E203,E301,E302,E305,W503
+`;
+    fs.writeFileSync(setupCfgFile, setupCfgContent, 'utf8');
     
-    // Create settings.gradle.kts
-    const settingsGradleFile = path.join(projectDir, 'settings.gradle.kts');
-    const settingsGradleContent = `rootProject.name = "kotlin-project"`;
-    fs.writeFileSync(settingsGradleFile, settingsGradleContent, 'utf8');
+    // Create .python-version file for Python version management
+    const pythonVersionFile = path.join(projectDir, '.python-version');
+    fs.writeFileSync(pythonVersionFile, '3.11.2\n', 'utf8');
+    
+    // Create __init__.py files to make directories proper Python packages
+    const srcInitFile = path.join(pythonSrcDir, '__init__.py');
+    fs.writeFileSync(srcInitFile, '# CodeCrush Python session\n', 'utf8');
+    
+    // Create a .pylintrc file to configure pylint (if used)
+    const pylintrcFile = path.join(projectDir, '.pylintrc');
+    const pylintrcContent = `[MASTER]
+load-plugins=
+
+[MESSAGES CONTROL]
+disable=missing-module-docstring,missing-class-docstring,missing-function-docstring,invalid-name,too-few-public-methods
+
+[FORMAT]
+max-line-length=88
+`;
+    fs.writeFileSync(pylintrcFile, pylintrcContent, 'utf8');
   } else if (language === 'java') {
     // Search recursively for the Equinox launcher jar
     const root = '/opt/jdt-language-server';
@@ -235,8 +293,8 @@ application {
   console.log(`Spawned ${language} LS pid=${proc.pid} for session ${sessionId || 'default'}`);
   
   // Store workspace info for this session
-  (proc as any).workspaceDir = (language === 'java' || language === 'kotlin') ? workspaceDir : undefined;
-  (proc as any).projectDir = (language === 'java' || language === 'kotlin') ? projectDir : undefined;
+  (proc as any).workspaceDir = (language === 'java' || language === 'kotlin' || language === 'python') ? workspaceDir : undefined;
+  (proc as any).projectDir = (language === 'java' || language === 'kotlin' || language === 'python') ? projectDir : undefined;
   return proc;
 }
 
@@ -253,7 +311,7 @@ async function main() {
 
   server.on('upgrade', async (req, socket, head) => {
     const url = req.url || '';
-    const langMatch = url.match(/^\/(kotlin|java)$/);
+    const langMatch = url.match(/^\/(kotlin|java|python)$/);
     if (!langMatch) {
       socket.destroy();
       return;
@@ -278,8 +336,8 @@ async function main() {
                 const json = typeof data === 'string' ? data : data.toString();
         console.log(`[CLIENT -> LS] ${json}`);
          
-         // For Java and Kotlin sessions, intercept initialize request to fix workspace paths
-         if ((language === 'java' || language === 'kotlin') && (lsProc as any).workspaceDir && (lsProc as any).projectDir) {
+         // For Java, Kotlin, and Python sessions, intercept initialize request to fix workspace paths
+         if ((language === 'java' || language === 'kotlin' || language === 'python') && (lsProc as any).workspaceDir && (lsProc as any).projectDir) {
           try {
             const message = JSON.parse(json);
             if (message.method === 'initialize') {
@@ -385,8 +443,8 @@ async function main() {
         console.log(`[${language} LS] client disconnected, killing process for session ${sessionId}`);
         lsProc.kill();
         
-        // Clean up workspace directory for Java and Kotlin sessions
-        if ((language === 'java' || language === 'kotlin') && (lsProc as any).workspaceDir) {
+        // Clean up workspace directory for Java, Kotlin, and Python sessions
+        if ((language === 'java' || language === 'kotlin' || language === 'python') && (lsProc as any).workspaceDir) {
           try {
             fs.rmSync((lsProc as any).workspaceDir, { recursive: true, force: true });
             console.log(`[${language} LS] cleaned up workspace ${(lsProc as any).workspaceDir}`);

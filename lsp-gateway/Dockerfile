@@ -1,15 +1,19 @@
 # LSP Gateway container based on Node + Theia LSP server
 FROM node:20-slim
 
-# Install JDK 17 and Gradle for Java/Kotlin LS dependency resolution
-RUN apt-get update && apt-get install -y openjdk-17-jre-headless curl unzip tar wget \
+# Install JDK 17, Gradle, Python, and Python LSP dependencies
+RUN apt-get update && apt-get install -y openjdk-17-jre-headless curl unzip tar wget python3 python3-pip python3-venv \
   && rm -rf /var/lib/apt/lists/* \
   && echo "Installing Gradle..." \
   && wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip -O /tmp/gradle.zip \
   && unzip -q /tmp/gradle.zip -d /opt \
   && rm /tmp/gradle.zip \
   && ln -s /opt/gradle-8.4/bin/gradle /usr/local/bin/gradle \
-  && gradle --version
+  && gradle --version \
+  && echo "Installing Python LSP Server..." \
+  && python3 -m pip install --break-system-packages --no-cache-dir 'python-lsp-server[all]' pylsp-mypy python-lsp-black \
+  && python3 -c "import pylsp; print('Python LSP Server installed successfully')" \
+  && python3 --version
 
 WORKDIR /usr/src/app
 

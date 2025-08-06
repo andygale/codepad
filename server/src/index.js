@@ -109,7 +109,7 @@ server.on('upgrade', async (req, socket, head) => {
   const upgradeStart = Date.now();
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const match = url.pathname.match(/^\/lsp\/(kotlin|java)\/([A-Za-z0-9]+)\/?$/);
+    const match = url.pathname.match(/^\/lsp\/(kotlin|java|python)\/([A-Za-z0-9]+)\/?$/);
     if (!match) {
       // Not an LSP upgrade path, let other handlers proceed
       return;
