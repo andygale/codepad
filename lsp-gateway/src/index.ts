@@ -13,6 +13,55 @@ async function spawnLanguageServer(language: string, sessionId?: string) {
 
   if (language === 'kotlin') {
     cmd = '/opt/kotlin-ls/server/bin/kotlin-language-server';
+    
+    // Create unique workspace for Kotlin session
+    workspaceDir = `/tmp/kotlin-workspace-${sessionId || 'default'}`;
+    projectDir = path.join(workspaceDir, 'project');
+    
+    fs.mkdirSync(workspaceDir, { recursive: true });
+    fs.mkdirSync(projectDir, { recursive: true });
+    
+    // Create Kotlin project structure
+    const srcDir = path.join(projectDir, 'src', 'main', 'kotlin');
+    fs.mkdirSync(srcDir, { recursive: true });
+    
+    // Create gradle.properties
+    const gradlePropsFile = path.join(projectDir, 'gradle.properties');
+    const gradlePropsContent = 'kotlin.code.style=official\nkotlin.incremental=true\n';
+    fs.writeFileSync(gradlePropsFile, gradlePropsContent, 'utf8');
+    
+    // Create build.gradle.kts with Kotlin coroutines support
+    const buildGradleFile = path.join(projectDir, 'build.gradle.kts');
+    const buildGradleContent = `plugins {
+    kotlin("jvm") version "2.2.0"
+}
+
+group = "org.example"
+version = "1.0-SNAPSHOT"
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("org.jetbrains.kotlin:kotlin-stdlib")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    testImplementation("org.jetbrains.kotlin:kotlin-test")
+}
+
+tasks.test {
+    useJUnitPlatform()
+}
+
+kotlin {
+    jvmToolchain(17)
+}`;
+    fs.writeFileSync(buildGradleFile, buildGradleContent, 'utf8');
+    
+    // Create settings.gradle.kts
+    const settingsGradleFile = path.join(projectDir, 'settings.gradle.kts');
+    const settingsGradleContent = 'rootProject.name = "kotlin-project"\n';
+    fs.writeFileSync(settingsGradleFile, settingsGradleContent, 'utf8');
   } else if (language === 'python') {
     cmd = 'python3';
     args = ['-m', 'pylsp'];
