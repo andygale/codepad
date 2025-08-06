@@ -67,6 +67,7 @@ services:
     depends_on:
       - codecrush-blue
       - codecrush-green
+      - lsp-gateway
     restart: unless-stopped
     networks:
       - codecrush-network

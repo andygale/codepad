@@ -37,6 +37,21 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  lsp-gateway:
+    build:
+      context: ./lsp-gateway
+      dockerfile: Dockerfile
+    expose:
+      - "3000"
+    restart: unless-stopped
+    networks:
+      - codecrush-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   nginx:
     image: nginx:alpine
     ports:

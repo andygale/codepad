@@ -12,6 +12,8 @@ yarn dev
 ```
 
 ### Production (Docker)
+
+#### Standard Deployment
 ```bash
 # Build and run with Docker Compose
 docker-compose up --build
@@ -20,6 +22,21 @@ docker-compose up --build
 docker build -t codecrush .
 docker run -p 3001:3001 codecrush
 ```
+
+#### Blue-Green Deployment
+```bash
+# Deploy with blue-green strategy (includes LSP gateway)
+./deploy-blue-green.sh --env prod
+
+# For local testing
+./deploy-blue-green.sh --env local
+```
+
+**LSP Gateway in Blue-Green Deployments:**
+- ✅ **Always Available**: LSP gateway runs independently of blue/green switching
+- ✅ **IntelliSense Support**: All languages (Java, Kotlin, Python) work in both environments
+- ✅ **Health Monitoring**: Gateway includes health checks and automatic restarts
+- ✅ **WebSocket Proxy**: Nginx routes LSP connections to the gateway service
 
 ## Security Configuration
 
@@ -84,8 +101,9 @@ node test-lsp-security.js
 ## IntelliSense Features
 
 ### Supported Languages
-- **Kotlin**: Full IntelliSense with Kotlin Language Server
+- **Kotlin**: Full IntelliSense with Kotlin Language Server (includes coroutines support)
 - **Java**: Full IntelliSense with Eclipse JDT Language Server
+- **Python**: Full IntelliSense with Python Language Server (Pylsp)
 
 ### Available Features
 - ✅ Auto-completion
